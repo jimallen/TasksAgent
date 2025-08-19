@@ -18,8 +18,14 @@ npm run start:test
 # Process emails once
 npm run start:once
 
-# Run with scheduler
+# Run with scheduler (classic mode)
 npm start
+
+# NEW: Run daemon with TUI
+npm run daemon
+
+# Run daemon in background
+npm run daemon:headless
 
 # Check logs
 tail -f logs/app.log
@@ -27,12 +33,21 @@ tail -f logs/error.log
 ```
 
 ## Key Files to Know
+
+### Core Files
 - `src/index.ts` - Main entry point and orchestration
 - `src/services/gmailService.ts` - Gmail MCP integration
 - `src/extractors/claudeTaskExtractor.ts` - Claude AI task extraction
 - `src/parsers/emailParser.ts` - Email pattern recognition
 - `src/services/obsidianService.ts` - Obsidian note creation
 - `.env` - Configuration (DO NOT commit)
+
+### Daemon Service Files (NEW)
+- `src/daemon.ts` - Daemon entry point
+- `src/daemon/service.ts` - Background service logic
+- `src/tui/interface.ts` - Terminal UI implementation
+- `src/processors/emailProcessor.ts` - Email processing wrapper
+- `daemon-stats.db` - Statistics database
 
 ## Common Issues & Solutions
 
@@ -65,6 +80,9 @@ When making changes, test:
 - **Processing Flow**: Gmail → Parser → AI → Obsidian → Notifications
 - **State Management**: SQLite for deduplication
 - **Scheduling**: Cron-based (9 AM, 1 PM, 5 PM)
+- **Daemon Service**: Background process with TUI monitoring
+- **TUI Framework**: blessed + blessed-contrib for terminal interface
+- **Statistics**: Persistent metrics in daemon-stats.db
 
 ## Environment Variables
 Critical settings in `.env`:

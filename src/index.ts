@@ -59,16 +59,17 @@ export class MeetingTranscriptAgent {
   /**
    * Main processing function
    */
-  async processEmails(): Promise<void> {
+  async processEmails(): Promise<{ processed: number; tasksExtracted: number; notesCreated: number }> {
     if (this.isProcessing) {
       logWarn('Already processing emails, skipping this run');
-      return;
+      return { processed: 0, tasksExtracted: 0, notesCreated: 0 };
     }
 
     this.isProcessing = true;
     const sessionStartTime = Date.now();
     let sessionProcessed = 0;
     let sessionTasks = 0;
+    let sessionNotes = 0;
     let sessionErrors = 0;
 
     try {
@@ -99,6 +100,7 @@ export class MeetingTranscriptAgent {
           if (result.success) {
             sessionProcessed++;
             sessionTasks += result.taskCount || 0;
+            if (result.taskCount && result.taskCount > 0) sessionNotes++;
             
             // Save to database
             await stateManager.saveProcessedEmail(
@@ -190,6 +192,8 @@ export class MeetingTranscriptAgent {
     } finally {
       this.isProcessing = false;
     }
+    
+    return { processed: sessionProcessed, tasksExtracted: sessionTasks, notesCreated: sessionNotes };
   }
 
   /**

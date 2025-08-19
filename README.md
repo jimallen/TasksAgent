@@ -10,13 +10,16 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 ## 📚 Documentation
 
 - [System Architecture](docs/system-architecture.md) - Detailed system design and components
+- [Daemon Service Guide](docs/daemon-service.md) - Background service with TUI monitoring
 - [API Reference](docs/api-reference.md) - Complete API documentation
 - [AI Context](CLAUDE.md) - Information for AI assistants
 - [Configuration Guide](#configuration) - Environment setup
 - [Troubleshooting](#troubleshooting) - Common issues and solutions
+- [Gmail Setup Guide](docs/GMAIL_SETUP.md) - Detailed Gmail MCP configuration
 
 ## ✨ Features
 
+### Core Features
 - 📧 **Automatic Gmail Monitoring**: Checks for new meeting transcripts 3 times daily (9 AM, 1 PM, 5 PM)
 - 🤖 **AI-Powered Task Extraction**: Uses Claude AI to intelligently extract tasks, action items, and key decisions
 - 📝 **Obsidian Integration**: Creates structured meeting notes in your Obsidian vault with proper formatting
@@ -25,6 +28,15 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 - 🔔 **Cross-platform Notifications**: Desktop notifications on Mac, Linux, and Windows
 - ⚡ **Rate Limiting**: Respects Gmail API quotas with intelligent rate limiting
 - 🎯 **Priority Management**: Categorizes tasks by priority and assigns due dates
+
+### NEW: Daemon Service with TUI
+- 🖥️ **Terminal User Interface**: Real-time monitoring dashboard with statistics
+- 📊 **Live Statistics**: Track emails processed, tasks extracted, and success rates
+- ⚙️ **Manual Control**: Start/stop service and trigger processing on-demand
+- 📈 **Performance Metrics**: Monitor uptime, error rates, and processing history
+- 🔧 **Configuration Editor**: Edit settings without leaving the TUI
+- 📜 **Activity Log**: Real-time log viewer with color-coded messages
+- 💾 **Persistent Stats**: SQLite database for historical metrics
 
 ## 📋 Prerequisites
 
@@ -202,8 +214,11 @@ kill -9 <PID>
 # Run initial setup and test
 npm run start:test
 
-# Start the agent
+# Start the agent (classic mode)
 npm start
+
+# NEW: Start as daemon with TUI interface
+npm run daemon
 ```
 
 ## Usage
@@ -211,8 +226,14 @@ npm start
 ### Running Modes
 
 ```bash
-# Start with scheduled processing (default)
+# Start with scheduled processing (classic)
 npm start
+
+# NEW: Daemon with Terminal UI (recommended)
+npm run daemon
+
+# Daemon in headless mode (for servers)
+npm run daemon:headless
 
 # Run once and exit
 npm run start:once
@@ -223,6 +244,30 @@ npm run start:test
 # Development mode with auto-reload
 npm run dev
 ```
+
+### Daemon Service with TUI
+
+The new daemon service provides a terminal-based dashboard for monitoring:
+
+```bash
+# Start daemon with TUI
+npm run daemon
+
+# TUI Controls:
+# F1 - Start service
+# F2 - Stop service  
+# F3 - Process emails now
+# F4 - Clear statistics
+# F5 - View logs
+# F6 - Edit configuration
+# Q  - Quit TUI
+
+# Install as systemd service (Linux)
+sudo npm run daemon:install
+sudo systemctl start meeting-transcript-agent@$USER
+```
+
+See [Daemon Service Documentation](docs/daemon-service.md) for details.
 
 ### Manual Processing
 

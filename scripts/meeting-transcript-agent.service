@@ -1,0 +1,26 @@
+[Unit]
+Description=Meeting Transcript Agent Daemon
+Documentation=https://github.com/yourusername/meeting-transcript-agent
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/Code/TasksAgent
+ExecStart=/usr/bin/node /home/%i/Code/TasksAgent/dist/daemon.js --headless
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/home/%i/Code/TasksAgent/logs/daemon.log
+StandardError=append:/home/%i/Code/TasksAgent/logs/daemon-error.log
+Environment="NODE_ENV=production"
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/%i/Code/TasksAgent/logs /home/%i/Code/TasksAgent/state.db /home/%i/Code/TasksAgent/daemon-stats.db
+ReadOnlyPaths=/home/%i/Documents
+
+[Install]
+WantedBy=multi-user.target

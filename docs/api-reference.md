@@ -349,6 +349,62 @@ npm run test:integration
 npm run start:test
 ```
 
+## Daemon Service API
+
+### DaemonService
+
+#### `start(): Promise<void>`
+Starts the background service with scheduled processing.
+
+#### `stop(): Promise<void>`
+Gracefully stops the service.
+
+#### `processEmails(isManual?: boolean): Promise<void>`
+Triggers email processing.
+
+**Parameters:**
+- `isManual`: Whether this is a manual trigger (default: false)
+
+#### `getStats(): ServiceStats`
+Returns current service statistics.
+
+**Returns:**
+```typescript
+interface ServiceStats {
+  startTime: Date;
+  lastRun: Date | null;
+  totalRuns: number;
+  successfulRuns: number;
+  failedRuns: number;
+  emailsProcessed: number;
+  tasksExtracted: number;
+  notesCreated: number;
+  errors: string[];
+  status: 'running' | 'stopped' | 'processing' | 'error';
+  nextScheduledRun: Date | null;
+}
+```
+
+#### `clearStats(): void`
+Resets all statistics to zero.
+
+### TUIInterface
+
+#### `constructor(service: DaemonService)`
+Creates new TUI with specified daemon service.
+
+#### `start(): void`
+Initializes and renders the terminal interface.
+
+### TUI Controls
+- **F1**: Start service
+- **F2**: Stop service
+- **F3**: Process emails manually
+- **F4**: Clear statistics
+- **F5**: View application logs
+- **F6**: Edit configuration
+- **Q**: Quit TUI (service continues)
+
 ## Logging
 
 ### Log Levels
@@ -360,6 +416,7 @@ npm run start:test
 ### Log Files
 - `logs/app.log` - All logs
 - `logs/error.log` - Errors only
+- `logs/daemon.log` - Daemon service logs (systemd)
 
 ### Log Format
 ```json

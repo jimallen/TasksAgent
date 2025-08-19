@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Meeting Transcript Agent is an automated system that monitors Gmail for meeting transcripts, extracts actionable tasks using AI, and creates organized notes in your Obsidian vault.
+The Meeting Transcript Agent is an automated system that monitors Gmail for meeting transcripts, extracts actionable tasks using AI, and creates organized notes in your Obsidian vault. The system can run as a scheduled cron job or as a persistent background daemon with a Terminal User Interface (TUI) for real-time monitoring and control.
 
 ## Architecture Diagram
 
@@ -12,6 +12,12 @@ graph TB
         GM[Gmail MCP Server]
         GN[Google Gemini Notes]
         GT[Google Meet Transcripts]
+    end
+    
+    subgraph "Daemon Service Layer"
+        DS[DaemonService]
+        TUI[TUI Interface]
+        PROC[EmailProcessor]
     end
     
     subgraph "Core Agent"
@@ -33,12 +39,18 @@ graph TB
     
     subgraph "Storage"
         DB[(SQLite Database)]
+        STATS[(Daemon Stats DB)]
         LOGS[Log Files]
     end
     
     GM --> GMCP
     GN --> GMCP
     GT --> GMCP
+    
+    TUI --> DS
+    DS --> PROC
+    DS --> STATS
+    PROC --> GS
     
     GMCP --> GS
     GS --> EP
@@ -58,6 +70,7 @@ graph TB
     GS --> LOGS
     EP --> LOGS
     CE --> LOGS
+    DS --> LOGS
 ```
 
 ## Component Flow
@@ -197,6 +210,73 @@ graph LR
   - Once (single run)
   - Test (validation only)
 
+## Daemon Service Architecture
+
+### Overview
+The daemon service provides a persistent background process with real-time monitoring capabilities through a Terminal User Interface (TUI).
+
+```mermaid
+graph TB
+    subgraph "Daemon Components"
+        DAEMON[daemon.ts<br/>Entry Point]
+        SERVICE[DaemonService<br/>Core Service]
+        TUI[TUIInterface<br/>Terminal UI]
+        PROC[EmailProcessor<br/>Wrapper]
+    end
+    
+    subgraph "TUI Panels"
+        STATUS[Service Status]
+        STATS[Statistics Table]
+        GAUGE[Success Rate]
+        SCHED[Next Runs]
+        ERRORS[Error Panel]
+        LOGS[Activity Log]
+        MENU[F-Key Controls]
+    end
+    
+    subgraph "Data Persistence"
+        STATSDB[(daemon-stats.db)]
+        STATE[(state.db)]
+    end
+    
+    DAEMON --> SERVICE
+    DAEMON --> TUI
+    SERVICE --> PROC
+    SERVICE --> STATSDB
+    PROC --> STATE
+    
+    TUI --> STATUS
+    TUI --> STATS
+    TUI --> GAUGE
+    TUI --> SCHED
+    TUI --> ERRORS
+    TUI --> LOGS
+    TUI --> MENU
+```
+
+### Service States
+```mermaid
+stateDiagram-v2
+    [*] --> Stopped
+    Stopped --> Running: Start (F1)
+    Running --> Processing: Manual (F3) or Scheduled
+    Processing --> Running: Complete
+    Running --> Stopped: Stop (F2)
+    Processing --> Error: Failure
+    Error --> Running: Recovery
+    Running --> Error: Critical Error
+    Error --> Stopped: Stop (F2)
+```
+
+### TUI Controls
+- **F1**: Start service
+- **F2**: Stop service
+- **F3**: Process emails manually
+- **F4**: Clear statistics
+- **F5**: View application logs
+- **F6**: Edit configuration
+- **Q**: Quit TUI (service continues)
+
 ## Security Architecture
 
 ```mermaid
@@ -277,10 +357,36 @@ stateDiagram-v2
 ```bash
 npm install
 npm run build
-npm run start:test
+npm run start:test  # Test connections
+npm run daemon      # Run with TUI
 ```
 
 ### Production Deployment
+
+#### Option 1: Daemon with TUI
+```bash
+npm ci --production
+npm run build
+npm run daemon      # Interactive monitoring
+```
+
+#### Option 2: Headless Daemon
+```bash
+npm ci --production
+npm run build
+npm run daemon:headless  # Background service
+```
+
+#### Option 3: Systemd Service (Linux)
+```bash
+npm ci --production
+npm run build
+sudo npm run daemon:install
+sudo systemctl start meeting-transcript-agent@$USER
+sudo systemctl enable meeting-transcript-agent@$USER
+```
+
+#### Option 4: Classic Cron Mode
 ```bash
 npm ci --production
 npm run build

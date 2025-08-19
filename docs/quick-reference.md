@@ -8,10 +8,15 @@ npm install
 cp .env.example .env
 npx @gongrzhe/server-gmail-autoauth-mcp auth
 
-# Daily usage
+# Daily usage (Classic)
 npm start              # Run with scheduler
 npm run start:once     # Process emails once
 npm run start:test     # Test connections
+
+# Daily usage (NEW Daemon)
+npm run daemon         # Run with TUI dashboard
+npm run daemon:headless # Run in background
+# TUI Controls: F1=Start F2=Stop F3=Process F4=Clear Q=Quit
 
 # Development
 npm run build          # Compile TypeScript
@@ -46,6 +51,11 @@ LOG_LEVEL=debug npm start # Enable debug logging
 TasksAgent/
 ├── src/
 │   ├── index.ts              # Main entry point
+│   ├── daemon.ts             # Daemon entry point (NEW)
+│   ├── daemon/
+│   │   └── service.ts        # Background service (NEW)
+│   ├── tui/
+│   │   └── interface.ts      # Terminal UI (NEW)
 │   ├── services/
 │   │   ├── gmailService.ts   # Gmail MCP integration
 │   │   ├── obsidianService.ts # Obsidian note creation

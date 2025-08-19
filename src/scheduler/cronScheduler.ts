@@ -36,7 +36,7 @@ export class CronScheduler {
     error?: string;
   }> = [];
   private healthCheckInterval?: NodeJS.Timeout;
-  private processingFunction?: () => Promise<void>;
+  private processingFunction?: () => Promise<any>;
 
   constructor() {
     this.setupDefaultSchedules();
@@ -145,7 +145,7 @@ export class CronScheduler {
   /**
    * Set the main processing function
    */
-  setProcessingFunction(fn: () => Promise<void>): void {
+  setProcessingFunction(fn: () => Promise<any>): void {
     this.processingFunction = fn;
     logDebug('Processing function registered');
   }
