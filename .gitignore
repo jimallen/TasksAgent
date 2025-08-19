@@ -23,6 +23,7 @@ src/config/token.json
 
 # Data files
 data/*.json
+data/*.db
 data/temp/
 
 # Testing
