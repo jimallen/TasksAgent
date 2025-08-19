@@ -66,14 +66,16 @@ The application requires the following Gmail API scopes:
 ## Step 6: Available MCP Tools
 
 The Gmail MCP Server provides these tools:
-- `gmail_send_email` - Send emails with attachments
-- `gmail_create_draft` - Create email drafts
-- `gmail_read_emails` - Read emails with filters
-- `gmail_download_attachment` - Download email attachments
-- `gmail_search_emails` - Search emails with queries
-- `gmail_modify_labels` - Add/remove email labels
-- `gmail_delete_email` - Delete emails
-- `gmail_get_filter` - Manage email filters
+- `search_emails` - Search emails with Gmail query syntax
+- `read_email` - Read full email content including attachments
+- `send_email` - Send new emails
+- `draft_email` - Create email drafts
+- `modify_email` - Modify email labels and status
+- `delete_email` - Delete emails
+- `list_email_labels` - List available labels
+- `batch_modify_emails` - Bulk email operations
+- `create_label` - Create new labels
+- `create_filter` - Create email filters
 
 ## Troubleshooting
 

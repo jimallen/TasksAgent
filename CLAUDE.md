@@ -38,8 +38,9 @@ tail -f logs/error.log
 
 ### Gmail Not Finding Emails
 - Check patterns in `src/parsers/emailParser.ts`
-- Verify search window in `.env` (GMAIL_HOURS_LOOKBACK)
+- Verify search window in `.env` (GMAIL_HOURS_LOOKBACK=120 for 5 days)
 - Current patterns: "Notes:", "Recording of", "Transcript for", "Meeting notes"
+- Gmail MCP tools: `search_emails`, `read_email` (not `gmail_*` prefixed)
 
 ### Tasks Not Extracting
 - Verify ANTHROPIC_API_KEY in `.env`
@@ -47,9 +48,9 @@ tail -f logs/error.log
 - Review transcript format in logs
 
 ### Notifications Failing
-- Desktop: Uses `notify-send` on Linux
-- Disable Slack if webhook not configured
-- Check NOTIFICATION_CHANNELS in `.env`
+- Desktop: Uses `notify-send` on Linux (fixed hint syntax issue)
+- Disable Slack if webhook not configured (removed from default channels)
+- Check NOTIFICATION_CHANNELS in `.env` (default: console,desktop)
 
 ## Testing Checklist
 When making changes, test:

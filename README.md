@@ -518,7 +518,7 @@ MIT License - see LICENSE file for details
 - [System Architecture](docs/system-architecture.md)
 - [API Documentation](docs/api-reference.md)
 - [Claude Context](CLAUDE.md)
-- [Gmail MCP Setup Guide](#setup-gmail-mcp-server)
+- [Gmail MCP Setup Guide](#3-setup-gmail-mcp-server)
 - [Obsidian Integration](#obsidian-vault-structure)
 
 ---
