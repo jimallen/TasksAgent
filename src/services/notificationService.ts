@@ -134,6 +134,11 @@ export class NotificationService {
    * Send console notification (always works)
    */
   private async sendConsoleNotification(options: NotificationOptions): Promise<void> {
+    // Skip console notifications in TUI mode
+    if (process.env['TUI_MODE']) {
+      return;
+    }
+    
     const separator = '='.repeat(50);
     const priority = options.priority ? `[${options.priority.toUpperCase()}]` : '';
     

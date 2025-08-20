@@ -52,8 +52,8 @@ const logger = winston.createLogger({
   ],
 });
 
-// Add console transport in development
-if (config.app.nodeEnv !== 'production') {
+// Add console transport in development (but not in TUI mode)
+if (config.app.nodeEnv !== 'production' && !process.env['TUI_MODE']) {
   logger.add(
     new winston.transports.Console({
       format: consoleFormat,

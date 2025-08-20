@@ -51,10 +51,33 @@ export class GmailService {
       logInfo('Connecting to Gmail MCP Server...');
 
       // Create transport to communicate with the MCP server
-      this.transport = new StdioClientTransport({
+      const transportOptions: any = {
         command: 'npx',
         args: ['@gongrzhe/server-gmail-autoauth-mcp'],
-      });
+      };
+      
+      // Suppress subprocess output in TUI mode
+      if (process.env['TUI_MODE']) {
+        // Use node directly to bypass npx output
+        transportOptions.command = 'node';
+        transportOptions.args = [
+          require.resolve('@gongrzhe/server-gmail-autoauth-mcp/dist/index.js')
+        ];
+        // Redirect stderr to null to prevent TUI corruption
+        transportOptions.stderr = 'ignore';
+        transportOptions.env = {
+          ...process.env,
+          NODE_NO_WARNINGS: '1',
+          NPM_CONFIG_LOGLEVEL: 'silent',
+          NPM_CONFIG_PROGRESS: 'false',
+          FORCE_COLOR: '0',
+          NO_COLOR: '1',
+          CI: 'true',
+          TERM: 'dumb',
+        };
+      }
+      
+      this.transport = new StdioClientTransport(transportOptions);
 
       // Create client
       this.client = new Client(

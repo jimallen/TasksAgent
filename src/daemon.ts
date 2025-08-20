@@ -1,14 +1,23 @@
 #!/usr/bin/env node
 
-import { DaemonService } from './daemon/service';
-import { TUIInterface } from './tui/interface';
-import logger from './utils/logger';
 import * as dotenv from 'dotenv';
-
-dotenv.config();
 
 const args = process.argv.slice(2);
 const command = args[0];
+
+// Set TUI mode early if needed
+if (command !== '--headless' && command !== '-h' && command !== '--help') {
+  process.env['TUI_MODE'] = 'true';
+  dotenv.config({ quiet: true });
+} else {
+  dotenv.config();
+}
+
+// Import after environment is configured
+import { DaemonService } from './daemon/service';
+import { TUIInterface } from './tui/interface';
+import logger from './utils/logger';
+import { patchConsole } from './utils/consolePatch';
 
 async function startDaemon() {
   logger.info('Starting Meeting Transcript Agent Daemon...');
@@ -37,6 +46,9 @@ async function startDaemon() {
     logger.info('Daemon is running in background. Press Ctrl+C to stop.');
   } else {
     logger.info('Starting TUI interface...');
+    
+    // Patch console to prevent subprocess output
+    patchConsole();
     
     try {
       const tui = new TUIInterface(service);

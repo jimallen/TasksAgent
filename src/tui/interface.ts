@@ -23,6 +23,14 @@ export class TUIInterface {
       smartCSR: true,
       title: 'Meeting Transcript Agent - Service Monitor',
       fullUnicode: true,
+      forceUnicode: true,
+      dockBorders: true,
+      ignoreDockContrast: true,
+      // Capture all input to prevent leakage
+      input: process.stdin,
+      output: process.stdout,
+      // Prevent external output from corrupting the screen
+      warnings: false,
     });
     
     this.grid = new contrib.grid({ rows: 12, cols: 12, screen: this.screen });
@@ -395,20 +403,40 @@ export class TUIInterface {
       style: {
         border: { fg: 'cyan' },
         label: { fg: 'cyan', bold: true },
+        focus: {
+          border: { fg: 'yellow' },
+        },
       },
+      tags: true,
     });
     
     try {
       const logs = fs.readFileSync(logPath, 'utf-8');
-      const lines = logs.split('\n');
-      const recentLogs = lines.slice(-100).join('\n');
-      logViewer.setContent(recentLogs);
+      const lines = logs.split('\n').filter(line => line.trim());
+      
+      // Parse and format JSON logs for better readability
+      const formattedLogs = lines.slice(-50).map(line => {
+        try {
+          const log = JSON.parse(line);
+          const time = log.timestamp?.split(' ')[1] || '';
+          const level = log.level?.toUpperCase() || 'INFO';
+          const msg = log.message || '';
+          return `[${time}] [${level}] ${msg}`;
+        } catch {
+          // If not JSON, clean any control characters
+          return line.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+        }
+      }).join('\n');
+      
+      logViewer.setContent(formattedLogs || 'No logs available');
     } catch (error) {
       logViewer.setContent(`Error reading logs: ${error}`);
     }
     
-    logViewer.key(['escape'], () => {
+    logViewer.key(['escape', 'q'], () => {
+      logViewer.detach();
       logViewer.destroy();
+      this.statusBox.focus();
       this.screen.render();
     });
     
@@ -448,7 +476,9 @@ export class TUIInterface {
       try {
         fs.writeFileSync(configPath, configEditor.getValue());
         this.log('Configuration saved', 'green');
+        configEditor.detach();
         configEditor.destroy();
+        this.statusBox.focus();
         this.screen.render();
       } catch (error) {
         this.log(`Failed to save configuration: ${error}`, 'red');
@@ -456,7 +486,9 @@ export class TUIInterface {
     });
     
     configEditor.key(['escape'], () => {
+      configEditor.detach();
       configEditor.destroy();
+      this.statusBox.focus();
       this.screen.render();
     });
     
@@ -465,26 +497,50 @@ export class TUIInterface {
   }
 
   private handleQuit(): void {
-    const confirm = blessed.question({
+    // Use a simple box with text instead of question widget which might be broken
+    const confirmBox = blessed.box({
       parent: this.screen,
       border: 'line',
-      height: 'shrink',
-      width: 'half',
+      height: 7,
+      width: 50,
       top: 'center',
       left: 'center',
-      label: ' Confirm ',
+      label: ' Confirm Exit ',
+      content: '\n  Quit the TUI? Service will continue running.\n\n  Press Y to quit, N to cancel',
       tags: true,
-      keys: true,
-      vi: true,
+      style: {
+        border: { fg: 'yellow' },
+        label: { fg: 'yellow', bold: true },
+      },
     });
     
-    confirm.ask('Quit the TUI? Service will continue running. (y/n)', (_err: any, value: string) => {
-      if (value && value.toLowerCase() === 'y') {
+    const handleKey = (ch: string, key: any) => {
+      if (ch === 'y' || ch === 'Y') {
+        // Unregister individual keys
+        this.screen.unkey('y', handleKey);
+        this.screen.unkey('Y', handleKey);
+        this.screen.unkey('n', handleKey);
+        this.screen.unkey('N', handleKey);
+        this.screen.unkey('escape', handleKey);
         this.cleanup();
         process.exit(0);
+      } else if (ch === 'n' || ch === 'N' || key.name === 'escape') {
+        // Unregister individual keys
+        this.screen.unkey('y', handleKey);
+        this.screen.unkey('Y', handleKey);
+        this.screen.unkey('n', handleKey);
+        this.screen.unkey('N', handleKey);
+        this.screen.unkey('escape', handleKey);
+        confirmBox.detach();
+        confirmBox.destroy();
+        this.statusBox.focus();
+        this.screen.render();
       }
-      this.screen.render();
-    });
+    };
+    
+    this.screen.key(['y', 'Y', 'n', 'N', 'escape'], handleKey);
+    confirmBox.focus();
+    this.screen.render();
   }
 
   private cleanup(): void {
@@ -492,14 +548,30 @@ export class TUIInterface {
       clearInterval(this.updateInterval);
     }
     this.service.removeAllListeners();
+    
+    // Restore terminal state
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    
+    // Clear and destroy screen properly
+    this.screen.destroy();
   }
 
   public start(): void {
+    // Set raw mode to capture all keyboard input
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+    
     // Force initial render
     this.updateStatus();
     this.updateStats();
     this.updateSchedule();
     this.updateErrors();
+    
+    // Set initial focus
+    this.statusBox.focus();
     this.screen.render();
   }
 }

@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger';
 import { config } from '../config/config';
 import { ExtractedTask, TaskExtractionResult } from '../extractors/claudeTaskExtractor';
@@ -32,7 +33,14 @@ export class ObsidianService {
 
   constructor() {
     // Get vault path from environment or config
-    this.vaultPath = process.env['OBSIDIAN_VAULT_PATH'] || config.obsidian?.vaultPath || '';
+    let vaultPath = process.env['OBSIDIAN_VAULT_PATH'] || config.obsidian?.vaultPath || '';
+    
+    // Expand tilde to home directory
+    if (vaultPath.startsWith('~')) {
+      vaultPath = path.join(os.homedir(), vaultPath.slice(1));
+    }
+    
+    this.vaultPath = vaultPath;
     this.meetingsFolder = 'Meetings';
     this.templatesFolder = 'Templates';
     this.dailyNotesFolder = 'Daily Notes';
