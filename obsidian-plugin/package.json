@@ -1,0 +1,39 @@
+{
+  "name": "obsidian-meeting-tasks",
+  "version": "1.0.0",
+  "description": "Obsidian plugin for importing meeting tasks from TasksAgent service",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.js",
+    "build": "tsc --noEmit && node esbuild.config.js production",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist main.js",
+    "release": "npm run clean && npm run build && npm test",
+    "version": "node version-bump.js && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "meeting",
+    "tasks",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.8.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.3.0",
+    "esbuild": "^0.25.9",
+    "jest": "^30.0.5",
+    "jest-environment-jsdom": "^30.0.5",
+    "obsidian": "^1.8.7",
+    "ts-jest": "^29.4.1",
+    "tslib": "^2.8.1",
+    "typescript": "^5.9.2"
+  }
+}
