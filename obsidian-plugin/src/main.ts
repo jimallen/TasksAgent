@@ -1,222 +1,562 @@
-import { App, Plugin, Notice, addIcon } from 'obsidian';
+/**
+ * Meeting Tasks Plugin for Obsidian
+ * Main plugin entry point and lifecycle management
+ */
+
+import { App, Plugin, PluginManifest, TFile, Notice } from 'obsidian';
+
+// Settings
 import { 
   MeetingTasksSettings, 
   DEFAULT_SETTINGS, 
   migrateSettings,
-  validateSettings,
-  addHistoryEntry,
+  validateSettings 
 } from './settings';
 import { MeetingTasksSettingTab } from './ui/settingsTab';
-import { ApiClient } from './api/client';
 
-export default class MeetingTasksPlugin extends Plugin {
+// API & WebSocket
+import { ApiClient } from './api/client';
+import { WebSocketManager } from './api/websocket';
+
+// Services
+import { NoteCreatorService } from './services/noteCreator';
+import { TaskProcessorService } from './services/taskProcessor';
+import { SchedulerService } from './services/scheduler';
+
+// UI Components
+import { RibbonIconHandler } from './ui/ribbonIcon';
+import { StatusBarItem } from './ui/statusBar';
+import { CommandManager } from './ui/commands';
+import { NotificationManager } from './ui/notifications';
+import { ProgressModal, ResultsModal, ErrorModal } from './ui/modals';
+
+// Utils
+import { Logger } from './utils/logger';
+import { GlobalErrorHandler } from './utils/errorHandler';
+import { CacheService } from './services/cache';
+
+// Types
+import { 
+  MeetingNote, 
+  ProcessingResult, 
+  ConnectionTestResult 
+} from './api/types';
+
+/**
+ * Main plugin class
+ */
+export class MeetingTasksPlugin extends Plugin {
   settings: MeetingTasksSettings;
-  statusBarItem: HTMLElement;
-  ribbonIcon: HTMLElement;
   
-  async onload() {
-    console.log('Loading Meeting Tasks Plugin');
-    
-    // Load settings
-    await this.loadSettings();
-    
-    // Add ribbon icon
-    this.addRibbonIcon();
-    
-    // Add status bar item
-    this.addStatusBar();
-    
-    // Register commands
-    this.registerCommands();
-    
-    // Add settings tab
-    this.addSettingTab(new MeetingTasksSettingTab(this.app, this));
-    
-    // Initialize services if enabled
-    if (this.settings.autoCheck) {
-      this.startAutoCheck();
-    }
-    
-    // Setup WebSocket connection
-    if (this.settings.notifications.enabled) {
-      this.setupWebSocket();
-    }
-    
-    console.log('Meeting Tasks Plugin loaded successfully');
+  // API & WebSocket
+  apiClient: ApiClient | null = null;
+  webSocketManager: WebSocketManager | null = null;
+  
+  // Services
+  noteCreator: NoteCreatorService | null = null;
+  taskProcessor: TaskProcessorService | null = null;
+  scheduler: SchedulerService | null = null;
+  cacheService: CacheService | null = null;
+  
+  // UI Components
+  ribbonIcon: RibbonIconHandler | null = null;
+  statusBar: StatusBarItem | null = null;
+  commandManager: CommandManager | null = null;
+  notificationManager: NotificationManager | null = null;
+  
+  // Utils
+  logger: Logger | null = null;
+  errorHandler: GlobalErrorHandler | null = null;
+  
+  // Modals
+  progressModal: ProgressModal | null = null;
+  
+  // State
+  isLoaded: boolean = false;
+
+  constructor(app: App, manifest: PluginManifest) {
+    super(app, manifest);
   }
-  
+
+  /**
+   * Plugin load lifecycle
+   */
+  async onload() {
+    console.log('Loading Meeting Tasks Plugin...');
+    
+    try {
+      // Load and migrate settings
+      await this.loadSettings();
+      
+      // Initialize logger first
+      this.logger = new Logger(this.app, this.settings);
+      this.logger.info('Plugin loading...', { version: this.manifest.version });
+      
+      // Initialize error handler
+      this.errorHandler = new GlobalErrorHandler(this, this.logger);
+      this.errorHandler.init();
+      
+      // Initialize API client
+      this.initializeApiClient();
+      
+      // Initialize services
+      await this.initializeServices();
+      
+      // Initialize UI components
+      this.initializeUI();
+      
+      // Initialize WebSocket if enabled
+      if (this.settings.enableWebSocket) {
+        await this.connectWebSocket();
+      }
+      
+      // Start scheduler if enabled
+      if (this.settings.autoCheck) {
+        this.scheduler?.start();
+      }
+      
+      // Process on startup if configured
+      if (this.settings.processOnStartup) {
+        setTimeout(() => {
+          this.checkForMeetingTasks();
+        }, 5000); // Delay to allow plugin to fully initialize
+      }
+      
+      this.isLoaded = true;
+      this.logger.info('Plugin loaded successfully');
+      
+    } catch (error) {
+      console.error('Failed to load Meeting Tasks Plugin:', error);
+      new Notice('Failed to load Meeting Tasks Plugin. Check console for details.');
+      this.errorHandler?.handleError(error as Error, 'Plugin load');
+    }
+  }
+
+  /**
+   * Plugin unload lifecycle
+   */
   onunload() {
-    console.log('Unloading Meeting Tasks Plugin');
+    console.log('Unloading Meeting Tasks Plugin...');
     
-    // Clean up any intervals or connections
-    this.cleanup();
+    if (this.logger) {
+      this.logger.info('Plugin unloading...');
+    }
     
+    // Stop scheduler
+    if (this.scheduler) {
+      this.scheduler.cleanup();
+      this.scheduler = null;
+    }
+    
+    // Disconnect WebSocket
+    if (this.webSocketManager) {
+      this.webSocketManager.disconnect();
+      this.webSocketManager = null;
+    }
+    
+    // Clean up UI components
+    if (this.ribbonIcon) {
+      this.ribbonIcon.cleanup();
+      this.ribbonIcon = null;
+    }
+    
+    if (this.statusBar) {
+      this.statusBar.cleanup();
+      this.statusBar = null;
+    }
+    
+    if (this.commandManager) {
+      this.commandManager.cleanup();
+      this.commandManager = null;
+    }
+    
+    if (this.notificationManager) {
+      this.notificationManager.cleanup();
+      this.notificationManager = null;
+    }
+    
+    // Close any open modals
+    if (this.progressModal) {
+      this.progressModal.close();
+      this.progressModal = null;
+    }
+    
+    // Clean up services
+    if (this.taskProcessor) {
+      this.taskProcessor.clearResults();
+      this.taskProcessor = null;
+    }
+    
+    if (this.noteCreator) {
+      this.noteCreator = null;
+    }
+    
+    if (this.cacheService) {
+      this.cacheService.cleanup();
+      this.cacheService = null;
+    }
+    
+    // Clean up API client
+    if (this.apiClient) {
+      this.apiClient = null;
+    }
+    
+    // Clean up error handler
+    if (this.errorHandler) {
+      this.errorHandler.cleanup();
+      this.errorHandler = null;
+    }
+    
+    // Clean up logger last
+    if (this.logger) {
+      this.logger.cleanup();
+      this.logger = null;
+    }
+    
+    this.isLoaded = false;
     console.log('Meeting Tasks Plugin unloaded');
   }
-  
-  async loadSettings() {
-    try {
-      const loadedData = await this.loadData();
-      // Use migration function to handle old settings formats
-      this.settings = migrateSettings(loadedData || {});
-      
-      // Validate settings on load
-      const validation = validateSettings(this.settings);
-      if (!validation.valid && this.settings.advanced?.debugMode) {
-        console.warn('Settings validation warnings:', validation.errors);
-      }
-    } catch (error) {
-      console.error('Failed to load settings:', error);
-      // Fall back to defaults on error
-      this.settings = { ...DEFAULT_SETTINGS };
-      new Notice('Failed to load settings, using defaults');
-    }
-  }
-  
-  async saveSettings() {
-    try {
-      // Validate before saving
-      const validation = validateSettings(this.settings);
-      if (!validation.valid) {
-        // Show validation errors but still save
-        if (validation.errors.length > 0) {
-          new Notice(`Settings saved with warnings: ${validation.errors[0]}`);
-        }
-      }
-      
-      await this.saveData(this.settings);
-      
-      // Update any dependent services after save
-      await this.updateServices();
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-      new Notice('Failed to save settings: ' + error.message);
-    }
-  }
-  
+
   /**
-   * Update services after settings change
+   * Load and migrate settings
    */
-  private async updateServices() {
-    // This will be implemented when we add the actual services
-    // For now, just log
-    if (this.settings.advanced?.debugMode) {
-      console.log('Settings updated, services would be refreshed here');
+  async loadSettings() {
+    const loadedData = await this.loadData();
+    this.settings = migrateSettings(loadedData);
+    
+    // Validate settings
+    const validation = validateSettings(this.settings);
+    if (!validation.valid) {
+      console.warn('Settings validation errors:', validation.errors);
+      new Notice('Some plugin settings are invalid. Please check the settings tab.');
     }
   }
-  
-  private addRibbonIcon() {
-    // Add custom icon
-    addIcon('meeting-tasks', `
-      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="50" cy="30" r="15" fill="currentColor"/>
-        <circle cx="25" cy="70" r="12" fill="currentColor"/>
-        <circle cx="75" cy="70" r="12" fill="currentColor"/>
-        <path d="M50 45 L25 58 M50 45 L75 58" stroke="currentColor" stroke-width="3" fill="none"/>
-      </svg>
-    `);
+
+  /**
+   * Save settings
+   */
+  async saveSettings() {
+    await this.saveData(this.settings);
     
-    this.ribbonIcon = this.addRibbonIcon('meeting-tasks', 'Check for new meeting tasks', async (evt: MouseEvent) => {
-      await this.checkForNewTasks();
-    });
-  }
-  
-  private addStatusBar() {
-    this.statusBarItem = this.addStatusBarItem();
-    this.updateStatusBar('Never checked');
-  }
-  
-  private updateStatusBar(text: string) {
-    if (this.statusBarItem) {
-      this.statusBarItem.setText(`📅 ${text}`);
+    // Update services with new settings
+    if (this.noteCreator) {
+      this.noteCreator.updateSettings(this.settings);
+    }
+    
+    if (this.notificationManager) {
+      this.notificationManager.updateSettings();
+    }
+    
+    if (this.logger) {
+      this.logger.setLogLevel(this.settings.advanced.logLevel);
+      this.logger.enableConsoleLogging(this.settings.advanced.debugMode);
     }
   }
-  
-  private registerCommands() {
-    // Check for new meeting tasks
-    this.addCommand({
-      id: 'check-new-tasks',
-      name: 'Check for new meeting tasks',
-      callback: async () => {
-        await this.checkForNewTasks();
-      }
-    });
-    
-    // Open plugin settings
-    this.addCommand({
-      id: 'open-settings',
-      name: 'Open Meeting Tasks settings',
-      callback: () => {
-        // @ts-ignore - accessing private API
-        this.app.setting.open();
-        // @ts-ignore
-        this.app.setting.openTabById(this.manifest.id);
-      }
-    });
-    
-    // View processing history
-    this.addCommand({
-      id: 'view-history',
-      name: 'View processing history',
-      callback: () => {
-        this.viewProcessingHistory();
-      }
-    });
-    
-    // Force reprocess last meeting
-    this.addCommand({
-      id: 'reprocess-last',
-      name: 'Force reprocess last meeting',
-      callback: async () => {
-        await this.reprocessLastMeeting();
-      }
+
+  /**
+   * Initialize API client
+   */
+  private initializeApiClient() {
+    this.apiClient = new ApiClient({
+      baseUrl: this.settings.serviceUrl,
+      apiKey: this.settings.anthropicApiKey,
+      timeout: this.settings.advanced.timeout,
+      retryAttempts: this.settings.advanced.retryAttempts,
+      retryDelay: this.settings.advanced.webSocketReconnectDelay,
     });
   }
-  
-  private async checkForNewTasks() {
-    new Notice('🔍 Checking for new meeting tasks...');
+
+  /**
+   * Initialize services
+   */
+  private async initializeServices() {
+    // Note creator service
+    this.noteCreator = new NoteCreatorService(this.app, this.settings);
+    
+    // Task processor service
+    this.taskProcessor = new TaskProcessorService(
+      this as any,
+      this.apiClient!,
+      this.noteCreator
+    );
+    
+    // Scheduler service
+    this.scheduler = new SchedulerService(this as any);
+    
+    // Cache service
+    this.cacheService = new CacheService(
+      this.app,
+      this.settings.advanced.cacheExpiry,
+      this.settings.advanced.enableTranscriptCache
+    );
+    
+    // Initialize cache
+    await this.cacheService.initialize();
+  }
+
+  /**
+   * Initialize UI components
+   */
+  private initializeUI() {
+    // Settings tab
+    this.addSettingTab(new MeetingTasksSettingTab(this.app, this));
+    
+    // Ribbon icon
+    this.ribbonIcon = new RibbonIconHandler(this as any);
+    this.ribbonIcon.init();
+    
+    // Status bar
+    this.statusBar = new StatusBarItem(this as any);
+    this.statusBar.init();
+    
+    // Command manager
+    this.commandManager = new CommandManager(this as any);
+    this.commandManager.registerCommands();
+    
+    // Notification manager
+    this.notificationManager = new NotificationManager(this as any);
+  }
+
+  /**
+   * Connect to WebSocket
+   */
+  async connectWebSocket() {
+    if (!this.settings.enableWebSocket) {
+      return;
+    }
     
     try {
-      // TODO: Implement actual API call to TasksAgent service
-      // This will be implemented in task 2.0
+      this.logger?.info('Connecting to WebSocket...');
       
-      // For now, just simulate the check
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      this.webSocketManager = new WebSocketManager({
+        url: this.settings.webSocketUrl,
+        reconnect: true,
+        reconnectDelay: this.settings.advanced.webSocketReconnectDelay,
+        maxReconnectAttempts: this.settings.advanced.maxReconnectAttempts,
+        debug: this.settings.advanced.debugMode,
+      });
       
-      const timestamp = new Date().toLocaleTimeString();
-      this.updateStatusBar(`Last: ${timestamp}`);
-      new Notice('✅ Check complete! No new tasks found.');
+      // Set up event handlers
+      this.setupWebSocketHandlers();
+      
+      // Connect
+      await this.webSocketManager.connect();
+      
+      // Subscribe to topics
+      this.webSocketManager.subscribe('meetings');
+      this.webSocketManager.subscribe('tasks');
+      
+      // Update UI
+      this.statusBar?.updateStatus('connected');
+      this.ribbonIcon?.updateConnectionStatus(true);
       
     } catch (error) {
-      console.error('Error checking for tasks:', error);
-      new Notice('❌ Error checking for tasks. Check console for details.');
+      this.logger?.error('WebSocket connection failed', error);
+      this.errorHandler?.handleError(error as Error, 'WebSocket connection');
     }
   }
-  
-  private startAutoCheck() {
-    // TODO: Implement auto-check scheduler
-    // This will be implemented in task 6.11
-    console.log('Auto-check will be implemented in a future task');
+
+  /**
+   * Disconnect WebSocket
+   */
+  disconnectWebSocket() {
+    if (this.webSocketManager) {
+      this.webSocketManager.disconnect();
+      this.webSocketManager = null;
+      
+      // Update UI
+      this.statusBar?.updateStatus('disconnected');
+      this.ribbonIcon?.updateConnectionStatus(false);
+    }
   }
-  
-  private setupWebSocket() {
-    // TODO: Implement WebSocket connection
-    // This will be implemented in task 6.0
-    console.log('WebSocket connection will be implemented in a future task');
+
+  /**
+   * Setup WebSocket event handlers
+   */
+  private setupWebSocketHandlers() {
+    if (!this.webSocketManager) return;
+    
+    this.webSocketManager.on('connected', () => {
+      this.logger?.info('WebSocket connected');
+      this.notificationManager?.showConnectionStatus(true);
+    });
+    
+    this.webSocketManager.on('disconnected', () => {
+      this.logger?.info('WebSocket disconnected');
+      this.notificationManager?.showConnectionStatus(false);
+    });
+    
+    this.webSocketManager.on('task:new', async (task) => {
+      this.logger?.info('New task received via WebSocket', task);
+      // Process new task
+    });
+    
+    this.webSocketManager.on('meeting:processed', async (meeting) => {
+      this.logger?.info('Meeting processed via WebSocket', meeting);
+      // Create note for meeting
+      try {
+        const file = await this.noteCreator?.createMeetingNote(meeting);
+        if (file && meeting.tasks) {
+          this.notificationManager?.showNewTasks(meeting.tasks, meeting);
+        }
+      } catch (error) {
+        this.errorHandler?.handleError(error as Error, 'WebSocket meeting processing');
+      }
+    });
   }
-  
-  private viewProcessingHistory() {
-    // TODO: Implement history view
-    new Notice('Processing history view coming soon!');
+
+  /**
+   * Check for meeting tasks
+   */
+  async checkForMeetingTasks(forceRefresh: boolean = false) {
+    if (!this.taskProcessor) {
+      throw new Error('Task processor not initialized');
+    }
+    
+    return this.taskProcessor.processEmails({
+      forceRefresh,
+      showProgress: true,
+    });
   }
-  
-  private async reprocessLastMeeting() {
-    // TODO: Implement reprocessing
-    new Notice('Reprocessing feature coming soon!');
+
+  /**
+   * Process a single email
+   */
+  async processSingleEmail(emailId: string) {
+    if (!this.taskProcessor) {
+      throw new Error('Task processor not initialized');
+    }
+    
+    return this.taskProcessor.processSingleEmail(emailId);
   }
-  
-  private cleanup() {
-    // TODO: Clean up any intervals, WebSocket connections, etc.
-    console.log('Cleanup completed');
+
+  /**
+   * Test connection to service
+   */
+  async testConnection(): Promise<ConnectionTestResult> {
+    if (!this.apiClient) {
+      return {
+        success: false,
+        error: 'API client not initialized',
+      };
+    }
+    
+    return this.apiClient.testConnection();
+  }
+
+  /**
+   * UI Helper Methods
+   */
+
+  showNotice(message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info') {
+    this.notificationManager?.show(message, type);
+  }
+
+  showProgressModal() {
+    this.progressModal = new ProgressModal(this as any);
+    this.progressModal.open();
+  }
+
+  hideProgressModal() {
+    if (this.progressModal) {
+      this.progressModal.close();
+      this.progressModal = null;
+    }
+  }
+
+  updateProgress(current: number, total: number, message: string, details?: string) {
+    this.progressModal?.updateProgress(current, total, message, details);
+  }
+
+  updateStatus(status: any) {
+    this.statusBar?.updateStatus(status);
+  }
+
+  showResultsModal(results: ProcessingResult) {
+    const modal = new ResultsModal(this as any, results);
+    modal.open();
+  }
+
+  showErrorModal(error: Error, context: string) {
+    const modal = new ErrorModal(this as any, error, context);
+    modal.open();
+  }
+
+  showLastResults() {
+    const results = this.taskProcessor?.getLastResults();
+    if (results) {
+      this.showResultsModal(results);
+    } else {
+      this.showNotice('No results available', 'info');
+    }
+  }
+
+  async openMeetingNote(meeting: MeetingNote) {
+    const note = await this.noteCreator?.findExistingNote(meeting);
+    if (note) {
+      await this.noteCreator?.openNote(note);
+    }
+  }
+
+  async openNote(file: TFile) {
+    await this.noteCreator?.openNote(file);
+  }
+
+  async getLastProcessedMeeting(): Promise<TFile | null> {
+    // This would need to track last processed meeting
+    return null;
+  }
+
+  async createMeetingNote(meeting: MeetingNote) {
+    return this.noteCreator?.createMeetingNote(meeting);
+  }
+
+  cancelProcessing() {
+    this.taskProcessor?.cancelProcessing();
+  }
+
+  startScheduler() {
+    this.scheduler?.start();
+  }
+
+  stopScheduler() {
+    this.scheduler?.stop();
+  }
+
+  openSettings() {
+    // @ts-ignore
+    this.app.setting.open();
+    // @ts-ignore
+    this.app.setting.openTabById(this.manifest.id);
+  }
+
+  async clearCache() {
+    await this.cacheService?.clear();
+  }
+
+  /**
+   * Emergency shutdown
+   */
+  emergencyShutdown() {
+    this.logger?.fatal('Emergency shutdown initiated');
+    
+    try {
+      // Stop all active operations
+      this.scheduler?.stop();
+      this.webSocketManager?.disconnect();
+      this.taskProcessor?.cancelProcessing();
+      
+      // Close modals
+      this.hideProgressModal();
+      
+      // Show notice
+      new Notice('Meeting Tasks Plugin has been shut down due to errors', 0);
+      
+    } catch (error) {
+      console.error('Error during emergency shutdown:', error);
+    }
   }
 }
+
+// Export as default for Obsidian
+export default MeetingTasksPlugin;
