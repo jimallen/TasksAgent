@@ -1,211 +1,275 @@
-# Obsidian Meeting Tasks Plugin
+# Meeting Tasks Plugin for Obsidian
 
-Automatically import meeting tasks and notes from the TasksAgent service into your Obsidian vault.
+Automatically import meeting tasks and notes from email transcripts using AI-powered extraction. This plugin connects to your local TasksAgent service to process meeting transcripts from Gmail and create structured notes in Obsidian.
 
 ## Features
 
-- 🔄 **Automatic Task Import**: Seamlessly import meeting tasks from Gmail transcripts
-- 🚀 **Real-time Updates**: WebSocket connection for instant notifications
-- 📝 **Smart Note Creation**: Organized meeting notes with extracted tasks, decisions, and action items
-- 🎨 **Templater Integration**: Full support for custom templates with Templater plugin
-- 🔔 **Notifications**: Get notified when new meeting tasks are available
-- 📊 **Task Prioritization**: Automatic priority assignment (High 🔴, Medium 🟡, Low 🟢)
-- 🔗 **Auto-linking**: Links to participants and daily notes
+- 🤖 **AI-Powered Task Extraction**: Uses Claude AI to intelligently extract tasks, decisions, and action items from meeting transcripts
+- 📧 **Gmail Integration**: Automatically finds and processes meeting emails via the TasksAgent service
+- 📝 **Smart Note Creation**: Creates well-structured meeting notes with participants, tasks, decisions, and next steps
+- 🔄 **Real-time Updates**: WebSocket support for instant notifications when new meetings are processed
+- 🎨 **Templater Integration**: Full support for custom templates using the Templater plugin
+- ⏰ **Automatic Scheduling**: Configure automatic checks at custom intervals with quiet hours support
+- 💾 **Offline Support**: Built-in caching for offline access to processed meetings
+- 🔔 **Rich Notifications**: Desktop notifications, sound alerts, and status bar updates
 
 ## Prerequisites
 
-- Obsidian v1.0.0 or higher
-- [TasksAgent service](https://github.com/yourusername/TasksAgent) running locally
-- Anthropic API key for Claude AI
-- (Optional) Templater plugin for advanced templates
+1. **TasksAgent Service**: You must have the TasksAgent service running locally. See [TasksAgent README](../README.md) for setup instructions.
+2. **Anthropic API Key**: You'll need your own Claude API key from [Anthropic](https://console.anthropic.com/).
+3. **Gmail Setup**: Gmail must be configured in the TasksAgent service with proper authentication.
 
 ## Installation
 
-### From Obsidian Community Plugins (Coming Soon)
-1. Open Settings → Community Plugins
-2. Search for "Meeting Tasks"
-3. Click Install and Enable
+### From Release
 
-### Manual Installation
-1. Download the latest release from [GitHub Releases](https://github.com/yourusername/obsidian-meeting-tasks/releases)
-2. Extract the files to your vault's `.obsidian/plugins/obsidian-meeting-tasks/` folder
+1. Download the latest `meeting-tasks-X.X.X.zip` from the [Releases](https://github.com/yourusername/TasksAgent/releases) page
+2. Extract the zip file into your vault's `.obsidian/plugins/meeting-tasks/` folder
 3. Reload Obsidian
 4. Enable the plugin in Settings → Community Plugins
 
-### Development Setup
+### From Source
+
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/obsidian-meeting-tasks.git
-cd obsidian-meeting-tasks
+git clone https://github.com/yourusername/TasksAgent.git
+cd TasksAgent/obsidian-plugin
 
 # Install dependencies
 npm install
 
-# Run in development mode (with file watching)
-npm run dev
+# Build the plugin
+npm run build:release
 
-# Build for production
-npm run build
-
-# Run tests
-npm test
+# Copy to your vault
+cp dist/* /path/to/vault/.obsidian/plugins/meeting-tasks/
 ```
 
 ## Configuration
 
-### Initial Setup
+### Basic Setup
 
-1. **Start TasksAgent Service**
-   ```bash
-   # In your TasksAgent directory
-   npm start
-   ```
-
-2. **Configure Plugin Settings**
-   - Open Settings → Meeting Tasks
-   - Enter your service URL (default: `http://localhost:3000`)
-   - Add your Anthropic API key
-   - Configure target folder for meeting notes
-   - Test the connection
-
-### Settings Overview
+1. Open Settings → Meeting Tasks
+2. Configure the following required settings:
 
 #### Service Connection
-- **Service URL**: URL of your TasksAgent service
-- **WebSocket URL**: WebSocket endpoint for real-time updates
-- **Connection Test**: Verify service connectivity
+- **Service URL**: URL of your TasksAgent service (default: `http://localhost:3000`)
+- **WebSocket URL**: WebSocket endpoint (default: `ws://localhost:3000`)
 
 #### AI Settings
-- **Anthropic API Key**: Your personal Claude API key
-- **Model Selection**: Choose Claude model (default: claude-3-haiku)
+- **Anthropic API Key**: Your Claude API key (required)
+- **Claude Model**: Model to use (default: `claude-3-haiku-20240307`)
 
 #### Obsidian Integration
-- **Target Folder**: Where meeting notes will be created
-- **Template Settings**: Configure Templater integration
-- **Note Naming**: Customize note naming convention
+- **Target Folder**: Where to create meeting notes (default: `Meetings`)
+- **Note Name Pattern**: How to name notes (default: `{{date}} - {{title}}`)
 
-#### Automation
-- **Auto-check**: Enable periodic checking for new tasks
-- **Check Interval**: How often to check (in minutes)
-- **Quiet Hours**: Disable checks during specified hours
+### Advanced Features
+
+#### Automatic Checking
+Enable automatic checking to process emails on a schedule:
+- Set check interval (in minutes)
+- Configure quiet hours to pause during specific times
+- Select active days of the week
+
+#### Templater Integration
+If you have the Templater plugin installed:
+1. Enable "Use Templater" in settings
+2. Set your template path
+3. Available variables in templates:
+   - `{{title}}` - Meeting title
+   - `{{date}}` - Meeting date
+   - `{{participants}}` - List of participants
+   - `{{tasks}}` - Extracted tasks
+   - `{{summary}}` - Meeting summary
+   - `{{keyDecisions}}` - Key decisions made
+   - `{{nextSteps}}` - Next steps
+
+#### WebSocket Real-time Updates
+Enable WebSocket for instant notifications when the TasksAgent service processes new meetings.
 
 ## Usage
 
-### Manual Task Checking
-1. Click the Meeting Tasks icon in the ribbon, or
-2. Use Command Palette: `Check for new meeting tasks`
+### Manual Check
+- Click the ribbon icon (📋) in the left sidebar
+- Use Command Palette: "Check for new meeting tasks"
+- Keyboard shortcut: `Ctrl/Cmd + M`
 
-### Automatic Processing
-When enabled, the plugin will:
-1. Periodically check for new meeting transcripts
-2. Extract tasks using Claude AI
-3. Create formatted notes in your vault
-4. Notify you of new tasks
+### Processing Workflow
+1. The plugin queries the TasksAgent service for new emails
+2. Service searches Gmail for meeting transcripts
+3. Claude AI extracts tasks and meeting information
+4. Plugin creates formatted notes in your vault
+5. Desktop notification shows summary of new tasks
 
-### Template Variables
-
-If using Templater, these variables are available:
-- `{{title}}` - Meeting title
-- `{{date}}` - Meeting date
-- `{{participants}}` - Array of participant names
-- `{{tasks}}` - Extracted task objects
-- `{{summary}}` - AI-generated summary
-- `{{keyDecisions}}` - Key decisions made
-- `{{nextSteps}}` - Next steps identified
-- `{{confidence}}` - AI confidence score
+### Task Organization
+Tasks are automatically organized by priority:
+- 🔴 **High Priority**: Urgent action items
+- 🟡 **Medium Priority**: Standard tasks
+- 🟢 **Low Priority**: Optional or future items
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| Check for new meeting tasks | Manually trigger task checking |
-| Open Meeting Tasks settings | Open plugin configuration |
-| View processing history | Show recent processing results |
-| Force reprocess last meeting | Reprocess the most recent meeting |
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| Check for new meeting tasks | `Ctrl/Cmd + M` | Manually check for new meetings |
+| Force check (ignore cache) | `Ctrl/Cmd + Shift + M` | Force refresh, bypassing cache |
+| Show statistics | `Ctrl/Cmd + Alt + M` | View processing statistics |
+| Process selected email ID | - | Process a specific email by ID |
+| Toggle automatic checking | - | Enable/disable auto-check |
+| Show processing history | - | View recent processing history |
+
+## Note Format
+
+Meeting notes are created with the following structure:
+
+```markdown
+---
+title: "Team Standup"
+date: 2024-01-15
+participants:
+  - Alice
+  - Bob
+  - Charlie
+tags:
+  - meeting
+  - tasks
+---
+
+# Team Standup
+
+## 📋 Executive Summary
+Brief overview of the meeting...
+
+## 👥 Participants
+- [[Alice]]
+- [[Bob]]
+- [[Charlie]]
+
+## ✅ Action Items & Tasks
+
+### High Priority 🔴
+- [ ] Critical task 1
+  - Assigned to: [[Alice]]
+  - Due: 2024-01-20
+
+### Medium Priority 🟡
+- [ ] Standard task 1
+  - Assigned to: [[Bob]]
+
+### Low Priority 🟢
+- [ ] Optional task 1
+  - Assigned to: [[Charlie]]
+
+## 🎯 Key Decisions
+- Decision 1
+- Decision 2
+
+## 🚀 Next Steps
+1. Next step 1
+2. Next step 2
+```
 
 ## Troubleshooting
 
-### Connection Issues
-- Verify TasksAgent service is running
-- Check service URL in settings
-- Ensure firewall allows local connections
+### Plugin won't connect to service
+1. Verify TasksAgent service is running: `npm start` in the TasksAgent directory
+2. Check service URL in settings (default: `http://localhost:3000`)
+3. Test connection using the "Test Connection" button in settings
 
-### No Tasks Found
-- Verify Gmail patterns in TasksAgent configuration
-- Check lookback window (default: 120 hours)
-- Ensure emails contain recognized transcript patterns
+### No emails found
+1. Verify Gmail is authenticated in TasksAgent
+2. Check email patterns in settings match your meeting email subjects
+3. Adjust lookback hours to search further back
+4. Check TasksAgent logs for Gmail errors
 
-### API Errors
-- Verify Anthropic API key is valid
-- Check API rate limits
-- Review error logs in Developer Console
+### Tasks not being extracted
+1. Verify your Anthropic API key is valid
+2. Check API key has sufficient credits
+3. Review Claude model selection in settings
+4. Check error logs in Obsidian Developer Console (`Ctrl/Cmd + Shift + I`)
+
+### Duplicate notes being created
+The plugin checks for duplicates by:
+- Matching note filenames
+- Checking email IDs in frontmatter
+- Comparing meeting dates and titles
+
+If duplicates still occur, enable "Debug Mode" in advanced settings for detailed logging.
+
+### WebSocket disconnections
+1. Check WebSocket URL matches your service configuration
+2. Review firewall settings for WebSocket connections
+3. Check "Advanced Settings" for reconnection configuration
+
+## Performance
+
+- Processes up to 50 emails per check (configurable)
+- 5-day default lookback window
+- ~2-5 seconds per transcript for AI processing
+- Minimal memory usage (~50-100MB)
+- Automatic cache cleanup after 1 hour (configurable)
+
+## Privacy & Security
+
+- **Local Processing**: All processing happens on your local machine
+- **No Cloud Storage**: Meeting data never leaves your system
+- **API Keys**: Stored locally in Obsidian's vault configuration
+- **Transcript Caching**: Optional, can be disabled in settings
+- **Gmail Access**: Via OAuth2 through the TasksAgent service
 
 ## Development
 
-### Project Structure
-```
-obsidian-meeting-tasks/
-├── src/
-│   ├── main.ts           # Plugin entry point
-│   ├── settings.ts       # Settings management
-│   ├── api/             # Service communication
-│   ├── services/        # Business logic
-│   ├── ui/              # UI components
-│   └── utils/           # Helper functions
-├── manifest.json        # Plugin metadata
-├── package.json         # Dependencies
-└── README.md           # Documentation
+### Building from Source
+```bash
+npm install
+npm run build:dev  # Development build
+npm run build:release  # Production build with minification
 ```
 
 ### Running Tests
 ```bash
-# Run all tests
 npm test
-
-# Run with coverage
 npm run test:coverage
-
-# Watch mode for development
-npm run test:watch
 ```
 
-### Building for Release
-```bash
-# Clean, build, and test
-npm run release
-
-# This will:
-# 1. Clean previous builds
-# 2. Type-check with TypeScript
-# 3. Bundle with esbuild
-# 4. Run all tests
-```
+### Debug Mode
+Enable "Debug Mode" in Advanced Settings to:
+- See detailed console logging
+- Access stack traces in error modals
+- Monitor WebSocket traffic
+- Track performance metrics
 
 ## Contributing
 
 Contributions are welcome! Please:
 1. Fork the repository
 2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
+3. Write tests for new features
+4. Submit a pull request
 
-## License
-
-MIT License - See [LICENSE](LICENSE) file for details
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## Support
 
-- 🐛 [Report Issues](https://github.com/yourusername/obsidian-meeting-tasks/issues)
-- 💬 [Discussions](https://github.com/yourusername/obsidian-meeting-tasks/discussions)
-- 📖 [Documentation](https://github.com/yourusername/obsidian-meeting-tasks/wiki)
+- **Issues**: [GitHub Issues](https://github.com/yourusername/TasksAgent/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/TasksAgent/discussions)
+- **Wiki**: [Plugin Wiki](https://github.com/yourusername/TasksAgent/wiki)
 
-## Acknowledgments
+## License
 
-- Built for [Obsidian](https://obsidian.md)
-- Powered by [Claude AI](https://anthropic.com)
-- Integrates with [TasksAgent](https://github.com/yourusername/TasksAgent)
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Credits
+
+- Built with [Obsidian Plugin API](https://github.com/obsidianmd/obsidian-api)
+- AI extraction powered by [Claude](https://www.anthropic.com/claude)
+- Gmail integration via [Gmail MCP](https://github.com/gongrzhe/server-gmail-autoauth-mcp)
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
 ---
 
-Made with ❤️ by the TasksAgent Team
+Made with ❤️ for the Obsidian community

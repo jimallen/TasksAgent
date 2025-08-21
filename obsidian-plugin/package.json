@@ -6,13 +6,16 @@
   "scripts": {
     "dev": "node esbuild.config.js",
     "build": "tsc --noEmit && node esbuild.config.js production",
+    "build:release": "NODE_ENV=production node build.js",
+    "build:dev": "node build.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist main.js",
-    "release": "npm run clean && npm run build && npm test",
-    "version": "node version-bump.js && git add manifest.json versions.json"
+    "release": "npm run clean && npm run build:release",
+    "version": "node version-bump.js && git add manifest.json versions.json",
+    "prepublishOnly": "npm run test && npm run build:release"
   },
   "keywords": [
     "obsidian",
