@@ -22,7 +22,7 @@ graph LR
 ### Check for Issue Tracking
 
 First, ask the user:
-> "Do you have a Linear ticket or GitHub issue for this bug? If you have Linear configured via MCP, I can fetch the details directly."
+> "Do you have a Linear ticket for this bug? If you have Linear configured via MCP, I can fetch the details directly."
 
 **Check MCP availability:**
 ```typescript
@@ -34,14 +34,13 @@ if (linearAvailable) {
 }
 ```
 
-**If Linear/GitHub issue exists:**
+**If Linear ticket exists:**
 - If Linear MCP available: Fetch issue details via MCP directly
-- If GitHub CLI available: Use `gh issue view [ISSUE-NUMBER]`
 - Extract description, reproduction steps, and context
 - Note any linked PRs or related issues
 - Get severity/priority from ticket
 
-**If no issue tracking or MCP not available:**
+**If no Linear ticket or MCP not available:**
 - Gather information manually
 - Ask for bug description and reproduction steps
 - Suggest configuring Linear MCP for better integration
@@ -56,7 +55,9 @@ if (linearAvailable) {
    - Environment where bug occurs
 
 2. **Document Bug Details**
-   Create a bug analysis document:
+   Create a bug analysis document and save it:
+   
+   **File structure**:
    ```markdown
    ## Bug: [Title]
    
@@ -81,6 +82,11 @@ if (linearAvailable) {
    - OS:
    - Related packages:
    ```
+   
+   **Save bug document**:
+   - **Create directory**: `mkdir -p /tasks/`
+   - **Save to**: `/tasks/bug-analysis-[issue-id].md`
+   - Confirm: "Bug analysis saved to `/tasks/bug-analysis-[issue-id].md`"
 
 ## Phase 2: Reproduction & Analysis
 
@@ -126,19 +132,35 @@ if (linearAvailable) {
 
 ## Phase 3: Create Fix Task List
 
-### Generate Bug Fix Tasks
+### Generate Bug Fix Tasks - Two Phase Process
 
-Create a structured task list for the fix:
+**Phase 3.1: Generate Parent Tasks**
+1. Analyze the bug and root cause
+2. Create 3-5 high-level tasks:
+   - Reproduce and Test Setup
+   - Implement Fix
+   - Validation
+   - Cleanup and Documentation
+3. Present parent tasks to user
+4. Ask: "I have generated the high-level bug fix tasks. Ready to generate the sub-tasks? Respond with 'Go' to proceed."
+5. **WAIT for user confirmation**
+
+**Phase 3.2: Generate Sub-Tasks** (After user says "Go")
+1. Break down each parent task into specific actions
+2. Create structured task list file with this format:
 
 ```markdown
-### Bug Fix Tasks: [Bug Title]
-
-#### Relevant Files
+### Relevant Files
 - `path/to/buggy/file.ts` - File containing the bug
 - `path/to/buggy/file.test.ts` - Test file to add regression test
 - `path/to/related/file.ts` - Related file that may need updates
 
-#### Tasks
+### Notes
+- Create regression test first (TDD approach)
+- Verify fix doesn't break existing functionality
+- Keep fix minimal and focused
+
+### Tasks
 
 - [ ] 1.0 Reproduce and Test Setup
   - [ ] 1.1 Create failing test that reproduces the bug
@@ -161,15 +183,35 @@ Create a structured task list for the fix:
   - [ ] 4.3 Add comment only if fix is non-obvious
 ```
 
+3. **Create tasks directory if needed**: `mkdir -p /tasks/`
+4. **Save to file**: `/tasks/tasks-bug-[issue-id].md` or `/tasks/tasks-bug-[description].md`
+5. Show path to user: "Bug fix task list saved to `/tasks/tasks-bug-[issue-id].md`"
+
 ## Phase 4: Implementation
 
-### Execute Bug Fix Tasks
+### Execute Bug Fix Tasks with Strict Protocol
 
-1. **Use Task List Protocol**
-   - Work through tasks one sub-task at a time
-   - Wait for user approval between sub-tasks
-   - Commit after completing parent tasks
-   - Use TodoWrite tool to track progress
+1. **Start Implementation**
+   - Load task list from `/tasks/tasks-bug-[issue-id].md`
+   - Ask user: "Ready to start implementing the bug fix tasks from `/tasks/tasks-bug-[issue-id].md`? (yes/y)"
+   - **WAIT for user confirmation before starting**
+
+2. **Follow Task Protocol**
+   
+   **For each sub-task:**
+   - Implement the sub-task
+   - Mark as complete `[x]` in task file
+   - Update task list file immediately
+   - Ask: "Sub-task completed. Ready to continue with the next sub-task? (yes/y)"
+   - **STOP and wait for user permission**
+   
+   **When all sub-tasks under a parent are complete:**
+   - Run full test suite
+   - Verify bug is fixed
+   - Stage changes if tests pass
+   - Commit with fix message format
+   - Mark parent task as complete
+   - Ask: "Parent task completed. Ready to continue with the next parent task? (yes/y)"
 
 2. **TDD Approach for Bug Fixes**
    ```typescript
@@ -228,7 +270,7 @@ Create a structured task list for the fix:
 ### Finalize the Fix
 
 1. **Update Issue Tracking**
-   If using Linear/GitHub:
+   If using Linear:
    - Update ticket status
    - Add implementation notes
    - Link to PR/commit
@@ -253,6 +295,16 @@ Create a structured task list for the fix:
    - Include before/after behavior
    - List testing performed
    - Note any risks or concerns
+
+## Confirmation Points Summary
+
+The bug fix workflow has **THREE key confirmation points**:
+
+1. **After parent tasks**: User says "Go" to generate sub-tasks
+2. **Before implementation**: User says "yes" to start fixing
+3. **After each sub-task**: User says "yes" to continue
+
+**NEVER skip ahead** - always wait for explicit user permission!
 
 ## Bug Fix Checklist
 

@@ -4,9 +4,23 @@ description: Generate task list from PRD
 
 Generate a detailed task list from an existing Product Requirements Document (PRD).
 
+## Usage
+
+```
+/qtask <prd-file>
+```
+
+Examples:
+- `/qtask prd-dark-mode.md` - Generate tasks from PRD file in /tasks/
+- `/qtask /tasks/prd-user-auth.md` - Full path also accepted
+
 ## Process
 
-1. **Receive PRD Reference**: Point to a specific PRD file in `/tasks/` directory
+1. **Load PRD File**: 
+   - Accept PRD filename as parameter
+   - Check `/tasks/` directory if filename only
+   - Accept full path if provided
+   - Error if file not found
 2. **Analyze PRD**: Read and analyze functional requirements, user stories, and other sections
 3. **Assess Current State**: Review existing codebase for infrastructure, patterns, and reusable components
 4. **Phase 1: Generate Parent Tasks**: Create 5-7 high-level tasks and present them. Ask: "I have generated the high-level tasks based on the PRD. Ready to generate the sub-tasks? Respond with 'Go' to proceed."

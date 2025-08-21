@@ -1,235 +1,87 @@
 ---
-description: Implement a new feature using PRD-driven workflow
+description: Generate PRD for new features in existing codebases
 ---
 
-# New Feature Implementation
+Generate a Product Requirements Document (PRD) for new features in existing codebases following the PRD generation process:
 
-Implement a new feature following the PRD → Task List → Systematic Implementation workflow.
+1. **Analyze Existing Codebase**: Understand the current architecture and patterns
+2. **Check for Linear Ticket**: Ask if there's a Linear ticket to reference
+3. **Receive Initial Prompt**: User provides a brief description or request for a new feature
+4. **Ask Clarifying Questions**: Gather sufficient detail to understand the "what" and "why" (not the "how")
+5. **Generate PRD**: Create a structured PRD document with integration considerations
+6. **Save PRD**: Save as `prd-[feature-name].md` in `/tasks/` directory
 
-## Feature Development Pipeline
+## Step 1: Analyze Existing Codebase
 
-```mermaid
-graph LR
-    A[Feature Request] --> B[Check Linear/GitHub]
-    B --> C[qprd: Create PRD]
-    C --> D[qtask: Generate Task List]
-    D --> E[qprocess-task-list: Implement]
-    E --> F[Feature Complete]
-```
+**Before gathering requirements, understand the existing system:**
+- Search for related functionality in the codebase
+- Identify current architecture patterns and conventions
+- Check for existing components that might be extended or reused
+- Note any constraints or dependencies that affect the feature
+- Review existing tests to understand quality standards
 
-## Phase 0: Check for Issue Tracking
+## Step 2: Check for Linear Ticket
 
-### First, check for existing tickets
+**First, ask the user:**
+> "Do you have a Linear ticket for this feature? If you have Linear configured via MCP, I can fetch the requirements directly."
 
-Ask the user:
-> "Do you have a Linear ticket or GitHub issue for this feature? If you have Linear configured via MCP, I can fetch the requirements directly."
-
-**Check for Linear MCP availability:**
-```typescript
-// Check if Linear MCP is configured
-const linearAvailable = await checkMcpServer('linear');
-if (linearAvailable) {
-  // Can fetch Linear tickets directly
-  const ticket = await fetchLinearTicket(ticketId);
-}
-```
-
-**If Linear/GitHub issue exists:**
+**If Linear ticket exists:**
 - If Linear MCP available: Fetch issue details via MCP
-- If GitHub CLI available: Use `gh issue view`
 - Extract feature description and requirements
 - Note acceptance criteria and user stories
 - Check for linked design docs or mockups
 - Use this information to inform PRD creation
 
-**If no issue tracking or MCP not available:**
+**If no Linear ticket:**
 - Proceed with manual requirements gathering
-- Create PRD from user input
-- Suggest setting up Linear MCP for future use
+- Ask clarifying questions to understand the feature
 
-## Phase 1: Requirements Documentation (qprd)
+## Clarifying Questions to Ask
 
-### Create or enhance PRD based on ticket info:
+**Standard questions:**
+- **Problem/Goal**: What problem does this feature solve? What is the main goal?
+- **Target User**: Who is the primary user of this feature?
+- **Core Functionality**: What key actions should users be able to perform?
+- **User Stories**: Provide user stories (As a [user], I want to [action] so that [benefit])
+- **Acceptance Criteria**: How will we know when this is successfully implemented?
+- **Scope/Boundaries**: What should this feature NOT do (non-goals)?
+- **Data Requirements**: What data does this feature need to display or manipulate?
+- **Design/UI**: Any existing mockups or UI guidelines to follow?
+- **Edge Cases**: Any potential edge cases or error conditions to consider?
 
-1. **Gather Requirements**
-   - If ticket exists, incorporate ticket details
-   - Ask clarifying questions to fill gaps
-   - Understand goals, users, and scope
-   - Document acceptance criteria
+**Integration-specific questions (for existing codebases):**
+- **Integration Points**: Which existing modules/components will this feature interact with?
+- **Code Patterns**: Should this follow existing patterns in the codebase?
+- **Migration**: Will this replace or work alongside existing functionality?
+- **Backward Compatibility**: Must we maintain compatibility with existing features?
+- **Performance Impact**: Are there performance considerations given current architecture?
 
-2. **Generate PRD**
-   - Use `qprd` command to create structured PRD
-   - Include ticket reference if applicable
-   - Save as `prd-[feature-name].md` in `/tasks/`
-   - Ensure all sections are complete
+## PRD Structure (For Existing Codebases)
 
-## Phase 2: Task Planning (qtask)
+1. **Introduction/Overview**: Feature description and problem it solves
+2. **Current State Analysis**: Summary of existing related functionality
+3. **Goals**: Specific, measurable objectives
+4. **User Stories**: User narratives describing feature usage and benefits
+5. **Functional Requirements**: Numbered list of specific functionalities
+6. **Integration Requirements**: How the feature fits into existing architecture
+   - Components to modify or extend
+   - New components needed
+   - API changes required
+   - Database schema changes
+7. **Non-Goals (Out of Scope)**: What this feature will NOT include
+8. **Design Considerations**: UI/UX requirements, following existing patterns
+9. **Technical Considerations**: 
+   - Existing constraints and dependencies
+   - Performance implications
+   - Security considerations
+   - Testing strategy (unit, integration, e2e)
+10. **Success Metrics**: How success will be measured
+11. **Open Questions**: Remaining questions needing clarification
 
-With PRD ready, generate implementation tasks:
+## Important
 
-1. **Analyze PRD**
-   - Review functional requirements
-   - Understand user stories
-   - Note technical considerations
-
-2. **Generate Task List**
-   - Use `qtask` command with the PRD
-   - Creates `tasks-prd-[feature-name].md`
-   - Breaks down into parent tasks and sub-tasks
-   - Identifies files to create/modify
-
-## Phase 3: Systematic Implementation (qprocess-task-list)
-
-Execute the task list methodically:
-
-1. **Follow Task Protocol**
-   - Use `qprocess-task-list` with the task list
-   - Implement one sub-task at a time
-   - Wait for user approval between sub-tasks
-   - Commit completed parent tasks
-
-2. **Implementation Guidelines**
-   - **TDD Approach**: Write failing test → implement → pass (C-1)
-   - **Domain Language**: Use business terms in naming (C-2)
-   - **Clean Code**: Self-documenting, no unnecessary comments (C-3)
-   - **Simple Functions**: Don't over-extract (C-4)
-   - **Type Safety**: Use branded types for IDs (C-TS3)
-   - **Pure Functions**: Prefer composable, testable functions (C-TS2)
-
-## Phase 4: Quality Assurance
-
-### During Implementation
-
-Apply quality checks at each step:
-
-1. **Function/Method Checklist**
-   - Easy to follow without mental gymnastics?
-   - Avoids deep nesting/high complexity?
-   - Uses appropriate data structures?
-   - All parameters used?
-   - Testable in isolation?
-   - Named appropriately?
-
-2. **Test Quality**
-   - Edge cases and boundaries covered
-   - Invalid inputs tested
-   - Realistic scenarios included
-   - Holistic assertions used (T-TS3)
-   - Tests grouped under describe blocks (T-TS5)
-
-3. **Code Standards**
-   - Passes `prettier --check` (G-TS1)
-   - Passes `turbo typecheck lint` (G-TS2)
-   - No console.logs or debug code
-   - Follows existing patterns
-
-### Final Validation
-
-Before marking feature complete:
-
-1. **Run Quality Gates**
-   ```bash
-   npm test                    # All tests pass
-   npm run typecheck          # No type errors
-   npm run lint               # Code standards met
-   ```
-
-2. **Update Documentation**
-   - System architecture updated if needed (D-1, D-2)
-   - README includes feature info (D-3)
-   - Docs in sync with implementation (D-4)
-
-3. **Verify Completion**
-   - ✅ All PRD requirements implemented
-   - ✅ All tasks in task list marked complete
-   - ✅ Test coverage comprehensive
-   - ✅ No regression in existing functionality
-   - ✅ Performance acceptable
-   - ✅ Error handling robust
-   - ✅ Code ready for peer review
-
-4. **Update Issue Tracking**
-   If using Linear/GitHub:
-   - Update ticket status to "In Review" or "Done"
-   - Add implementation notes
-   - Link to PR and relevant commits
-   - Note any deviations from original requirements
-
-## Workflow Commands
-
-```bash
-# Prerequisites check
-check_tool() {
-  if ! command -v "$1" &> /dev/null; then
-    echo "⚠️ $1 not installed. $2"
-    return 1
-  fi
-  return 0
-}
-
-# Step 0: Check for Linear/GitHub ticket
-# If using GitHub CLI:
-if check_tool "gh" "Install from https://cli.github.com (optional)"; then
-  # Fetch issue details if available
-  gh issue view [ISSUE-NUMBER] 2>/dev/null || echo "ℹ️ No GitHub issue found"
-fi
-
-# Step 1: Create PRD
-# Use qprd command to generate PRD
-# Include ticket reference if applicable
-# Output: /tasks/prd-[feature-name].md
-
-# Step 2: Generate task list
-# Use qtask command with PRD
-# Output: /tasks/tasks-prd-[feature-name].md
-
-# Step 3: Implement systematically
-# Use qprocess-task-list with task list
-# Implements one sub-task at a time
-
-# During implementation (Node.js projects)
-if [ -f "package.json" ] && check_tool "npm" "Install Node.js"; then
-  npm test [test-file]       # Run specific tests
-  npm run typecheck 2>/dev/null || echo "⚠️ typecheck not configured"
-  npm run lint 2>/dev/null || echo "⚠️ lint not configured"
-fi
-
-# Branch management
-if check_tool "git" "Git is required"; then
-  git checkout -b feat/[feature-name]
-  git add .
-  git commit -m "feat: [description]" \
-    -m "Implements: [ticket-id]" \
-    -m "[additional details]"
-fi
-
-# Update Linear/GitHub (if using gh CLI)
-if command -v gh &> /dev/null; then
-  # Mark issue as in-progress/done
-  gh issue edit [ISSUE-NUMBER] --add-label "in-progress"
-  # Link PR to issue
-  gh pr create --title "feat: [description]" --body "Closes #[ISSUE-NUMBER]"
-fi
-```
-
-## Common Pitfalls to Avoid
-
-- ❌ Skipping PRD creation for complex features
-- ❌ Not following the task list systematically
-- ❌ Implementing multiple sub-tasks without commits
-- ❌ Forgetting to wait for user approval between tasks
-- ❌ Creating new patterns when existing ones work
-- ❌ Over-engineering simple features
-- ❌ Leaving debug code or console.logs
-- ❌ Not updating task list as you work
-
-## Success Metrics
-
-A feature is successfully implemented when:
-1. PRD requirements fully satisfied
-2. Task list completely checked off
-3. All tests passing
-4. Code meets quality standards
-5. Documentation updated
-6. No performance degradation
-7. Ready for production deployment
+- **ALWAYS** analyze the existing codebase first before gathering requirements
+- Do NOT start implementing the PRD
+- Ask clarifying questions that consider the existing system
+- Incorporate both user answers and codebase analysis into the PRD
+- Focus on how the new feature integrates with existing code

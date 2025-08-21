@@ -5,10 +5,16 @@
  * Creates production-ready plugin bundle with minification
  */
 
-const esbuild = require('esbuild');
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+import esbuild from 'esbuild';
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 
 // Build configuration
 const PROD = process.env.NODE_ENV === 'production';
@@ -284,8 +290,8 @@ async function main() {
 }
 
 // Run if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   main();
 }
 
-module.exports = { build, clean, copyAssets };
+export { build, clean, copyAssets };

@@ -345,7 +345,7 @@ fi
 
 ## Integration Points
 
-### For Linear/GitHub Issues
+### For Linear Issues
 
 **Check MCP availability:**
 ```typescript

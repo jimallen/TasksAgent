@@ -3,7 +3,7 @@
  * Handles real-time updates from TasksAgent service
  */
 
-import { EventEmitter } from 'events';
+import { Events } from 'obsidian';
 import { 
   WebSocketMessage, 
   WebSocketEvent, 
@@ -39,13 +39,13 @@ export interface WebSocketOptions {
 /**
  * WebSocket connection manager
  */
-export class WebSocketManager extends EventEmitter {
+export class WebSocketManager extends Events {
   private ws: WebSocket | null = null;
   private options: WebSocketOptions;
   private state: WebSocketState = WebSocketState.CLOSED;
   private reconnectAttempts: number = 0;
-  private reconnectTimer: NodeJS.Timer | null = null;
-  private heartbeatTimer: NodeJS.Timer | null = null;
+  private reconnectTimer: number | null = null;
+  private heartbeatTimer: number | null = null;
   private lastPingTime: number = 0;
   private lastPongTime: number = 0;
   private subscriptions: Set<string> = new Set();
@@ -77,8 +77,16 @@ export class WebSocketManager extends EventEmitter {
 
       if (this.state === WebSocketState.CONNECTING) {
         // Wait for existing connection attempt
-        this.once('connected', () => resolve());
-        this.once('error', (error) => reject(error));
+        const connectedHandler = () => {
+          this.off('connected', connectedHandler);
+          resolve();
+        };
+        const errorHandler = (error: Error) => {
+          this.off('error', errorHandler);
+          reject(error);
+        };
+        this.on('connected', connectedHandler);
+        this.on('error', errorHandler);
         return;
       }
 
@@ -132,7 +140,7 @@ export class WebSocketManager extends EventEmitter {
     }
     
     this.state = WebSocketState.CLOSED;
-    this.emit('disconnected');
+    this.trigger('disconnected');
   }
 
   /**
@@ -237,7 +245,7 @@ export class WebSocketManager extends EventEmitter {
     this.flushMessageQueue();
     
     // Emit connected event
-    this.emit('connected');
+    this.trigger('connected');
   }
 
   /**
@@ -283,7 +291,7 @@ export class WebSocketManager extends EventEmitter {
           break;
           
         default:
-          this.emit('message', message);
+          this.trigger('message', message);
       }
     } catch (error) {
       this.log('Failed to parse message:', error);
@@ -295,7 +303,7 @@ export class WebSocketManager extends EventEmitter {
    */
   private onError(error: Error): void {
     this.log('WebSocket error:', error);
-    this.emit('error', error);
+    this.trigger('error', error);
   }
 
   /**
@@ -310,7 +318,7 @@ export class WebSocketManager extends EventEmitter {
     this.clearHeartbeatTimer();
     
     // Emit disconnected event
-    this.emit('disconnected', event.code, event.reason);
+    this.trigger('disconnected', event.code, event.reason);
     
     // Attempt reconnection if enabled
     if (this.options.reconnect && !this.isReconnecting && event.code !== 1000) {
@@ -325,7 +333,7 @@ export class WebSocketManager extends EventEmitter {
     if (this.isReconnecting) return;
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts) {
       this.log('Max reconnection attempts reached');
-      this.emit('reconnectFailed');
+      this.trigger('reconnectFailed');
       return;
     }
     
@@ -349,7 +357,7 @@ export class WebSocketManager extends EventEmitter {
       });
     }, delay);
     
-    this.emit('reconnecting', this.reconnectAttempts, delay);
+    this.trigger('reconnecting', this.reconnectAttempts, delay);
   }
 
   /**
@@ -410,7 +418,7 @@ export class WebSocketManager extends EventEmitter {
   private handlePong(): void {
     this.lastPongTime = Date.now();
     const latency = this.lastPongTime - this.lastPingTime;
-    this.emit('heartbeat', latency);
+    this.trigger('heartbeat', latency);
   }
 
   /**
@@ -418,7 +426,7 @@ export class WebSocketManager extends EventEmitter {
    */
   private handleNewTask(message: WebSocketMessage): void {
     if (message.data?.task) {
-      this.emit('task:new', message.data.task as ExtractedTask);
+      this.trigger('task:new', message.data.task as ExtractedTask);
     }
   }
 
@@ -427,7 +435,7 @@ export class WebSocketManager extends EventEmitter {
    */
   private handleMeetingProcessed(message: WebSocketMessage): void {
     if (message.data?.meeting) {
-      this.emit('meeting:processed', message.data.meeting as MeetingNote);
+      this.trigger('meeting:processed', message.data.meeting as MeetingNote);
     }
   }
 
@@ -436,7 +444,7 @@ export class WebSocketManager extends EventEmitter {
    */
   private handleEmailReceived(message: WebSocketMessage): void {
     if (message.data?.emailId) {
-      this.emit('email:received', message.data.emailId);
+      this.trigger('email:received', message.data.emailId);
     }
   }
 
@@ -444,14 +452,14 @@ export class WebSocketManager extends EventEmitter {
    * Handle processing started event
    */
   private handleProcessingStarted(message: WebSocketMessage): void {
-    this.emit('processing:started', message.data);
+    this.trigger('processing:started', message.data);
   }
 
   /**
    * Handle processing completed event
    */
   private handleProcessingCompleted(message: WebSocketMessage): void {
-    this.emit('processing:completed', message.data);
+    this.trigger('processing:completed', message.data);
   }
 
   /**
@@ -459,7 +467,7 @@ export class WebSocketManager extends EventEmitter {
    */
   private handleErrorMessage(message: WebSocketMessage): void {
     const error = new Error(message.error || 'Unknown error');
-    this.emit('error', error);
+    this.trigger('error', error);
   }
 
   /**
@@ -468,7 +476,7 @@ export class WebSocketManager extends EventEmitter {
   private handleSubscriptionConfirmed(message: WebSocketMessage): void {
     if (message.data?.topic) {
       this.log('Subscription confirmed:', message.data.topic);
-      this.emit('subscription:confirmed', message.data.topic);
+      this.trigger('subscription:confirmed', message.data.topic);
     }
   }
 

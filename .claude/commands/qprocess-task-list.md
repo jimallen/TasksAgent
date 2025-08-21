@@ -4,6 +4,16 @@ description: Process task list systematically
 
 Process an existing task list file following strict task management protocols.
 
+## Usage
+
+```
+/qprocess-task-list <task-file>
+```
+
+Examples:
+- `/qprocess-task-list tasks-prd-dark-mode.md` - Process task file in /tasks/
+- `/qprocess-task-list /tasks/tasks-prd-user-auth.md` - Full path also accepted
+
 ## Task Implementation Protocol
 
 **CRITICAL: One sub-task at a time!**

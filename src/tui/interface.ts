@@ -370,8 +370,8 @@ export class TUIInterface {
       vi: true,
     });
     
-    confirm.ask('Clear all statistics? (y/n)', (_err: any, value: string) => {
-      if (value && value.toLowerCase() === 'y') {
+    confirm.ask('Clear all statistics? (y/n)', (_err: any, value: string | null) => {
+      if (value && typeof value === 'string' && value.toLowerCase() === 'y') {
         this.service.clearStats();
         this.log('Statistics cleared', 'cyan');
       }
