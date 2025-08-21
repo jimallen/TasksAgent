@@ -1,90 +1,13 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, addIcon } from 'obsidian';
-
-// Plugin Settings Interface
-interface MeetingTasksSettings {
-  // Service Connection
-  serviceUrl: string;
-  webSocketUrl: string;
-  
-  // Gmail Settings (via proxy)
-  gmailPatterns: string[];
-  lookbackHours: number;
-  maxEmails: number;
-  
-  // AI Settings (user-provided)
-  anthropicApiKey: string;
-  claudeModel: string;
-  
-  // Obsidian Integration
-  targetFolder: string;
-  noteTemplate: string;
-  useTemplater: boolean;
-  templaterTemplate: string;
-  templateVariables: Record<string, string>;
-  
-  // Automation
-  autoCheck: boolean;
-  checkInterval: number;
-  quietHours: {
-    start: string;
-    end: string;
-  };
-  
-  // Notifications
-  notifications: {
-    enabled: boolean;
-    onNewTasks: boolean;
-    onErrors: boolean;
-  };
-  
-  // Advanced
-  advanced: {
-    retryAttempts: number;
-    timeout: number;
-    cacheExpiry: number;
-    enableTranscriptCache: boolean;
-    webSocketReconnectDelay: number;
-  };
-}
-
-// Default Settings
-const DEFAULT_SETTINGS: MeetingTasksSettings = {
-  serviceUrl: 'http://localhost:3000',
-  webSocketUrl: 'ws://localhost:3000',
-  gmailPatterns: [
-    'Notes:',
-    'Recording of',
-    'Transcript for',
-    'Meeting notes'
-  ],
-  lookbackHours: 120,
-  maxEmails: 50,
-  anthropicApiKey: '',
-  claudeModel: 'claude-3-haiku-20240307',
-  targetFolder: 'Meetings',
-  noteTemplate: '',
-  useTemplater: false,
-  templaterTemplate: '',
-  templateVariables: {},
-  autoCheck: false,
-  checkInterval: 60,
-  quietHours: {
-    start: '22:00',
-    end: '08:00'
-  },
-  notifications: {
-    enabled: true,
-    onNewTasks: true,
-    onErrors: true
-  },
-  advanced: {
-    retryAttempts: 3,
-    timeout: 60000,
-    cacheExpiry: 3600000,
-    enableTranscriptCache: true,
-    webSocketReconnectDelay: 5000
-  }
-};
+import { App, Plugin, Notice, addIcon } from 'obsidian';
+import { 
+  MeetingTasksSettings, 
+  DEFAULT_SETTINGS, 
+  migrateSettings,
+  validateSettings,
+  addHistoryEntry,
+} from './settings';
+import { MeetingTasksSettingTab } from './ui/settingsTab';
+import { ApiClient } from './api/client';
 
 export default class MeetingTasksPlugin extends Plugin {
   settings: MeetingTasksSettings;
@@ -132,11 +55,54 @@ export default class MeetingTasksPlugin extends Plugin {
   }
   
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    try {
+      const loadedData = await this.loadData();
+      // Use migration function to handle old settings formats
+      this.settings = migrateSettings(loadedData || {});
+      
+      // Validate settings on load
+      const validation = validateSettings(this.settings);
+      if (!validation.valid && this.settings.advanced?.debugMode) {
+        console.warn('Settings validation warnings:', validation.errors);
+      }
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+      // Fall back to defaults on error
+      this.settings = { ...DEFAULT_SETTINGS };
+      new Notice('Failed to load settings, using defaults');
+    }
   }
   
   async saveSettings() {
-    await this.saveData(this.settings);
+    try {
+      // Validate before saving
+      const validation = validateSettings(this.settings);
+      if (!validation.valid) {
+        // Show validation errors but still save
+        if (validation.errors.length > 0) {
+          new Notice(`Settings saved with warnings: ${validation.errors[0]}`);
+        }
+      }
+      
+      await this.saveData(this.settings);
+      
+      // Update any dependent services after save
+      await this.updateServices();
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      new Notice('Failed to save settings: ' + error.message);
+    }
+  }
+  
+  /**
+   * Update services after settings change
+   */
+  private async updateServices() {
+    // This will be implemented when we add the actual services
+    // For now, just log
+    if (this.settings.advanced?.debugMode) {
+      console.log('Settings updated, services would be refreshed here');
+    }
   }
   
   private addRibbonIcon() {
@@ -252,96 +218,5 @@ export default class MeetingTasksPlugin extends Plugin {
   private cleanup() {
     // TODO: Clean up any intervals, WebSocket connections, etc.
     console.log('Cleanup completed');
-  }
-}
-
-// Settings Tab Implementation
-class MeetingTasksSettingTab extends PluginSettingTab {
-  plugin: MeetingTasksPlugin;
-  
-  constructor(app: App, plugin: MeetingTasksPlugin) {
-    super(app, plugin);
-    this.plugin = plugin;
-  }
-  
-  display(): void {
-    const { containerEl } = this;
-    
-    containerEl.empty();
-    containerEl.createEl('h2', { text: 'Meeting Tasks Settings' });
-    
-    // Service Connection Section
-    containerEl.createEl('h3', { text: 'Service Connection' });
-    
-    new Setting(containerEl)
-      .setName('Service URL')
-      .setDesc('URL of the TasksAgent service')
-      .addText(text => text
-        .setPlaceholder('http://localhost:3000')
-        .setValue(this.plugin.settings.serviceUrl)
-        .onChange(async (value) => {
-          this.plugin.settings.serviceUrl = value;
-          await this.plugin.saveSettings();
-        }));
-    
-    new Setting(containerEl)
-      .setName('WebSocket URL')
-      .setDesc('WebSocket URL for real-time updates')
-      .addText(text => text
-        .setPlaceholder('ws://localhost:3000')
-        .setValue(this.plugin.settings.webSocketUrl)
-        .onChange(async (value) => {
-          this.plugin.settings.webSocketUrl = value;
-          await this.plugin.saveSettings();
-        }));
-    
-    new Setting(containerEl)
-      .setName('Test Connection')
-      .setDesc('Test the connection to the TasksAgent service')
-      .addButton(button => button
-        .setButtonText('Test')
-        .onClick(async () => {
-          new Notice('🔍 Testing connection...');
-          // TODO: Implement connection test in task 2.8
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          new Notice('✅ Connection test will be implemented in task 2.8');
-        }));
-    
-    // AI Settings Section
-    containerEl.createEl('h3', { text: 'AI Settings' });
-    
-    new Setting(containerEl)
-      .setName('Anthropic API Key')
-      .setDesc('Your personal Anthropic API key for Claude')
-      .addText(text => text
-        .setPlaceholder('sk-ant-...')
-        .setValue(this.plugin.settings.anthropicApiKey)
-        .onChange(async (value) => {
-          this.plugin.settings.anthropicApiKey = value;
-          await this.plugin.saveSettings();
-        }))
-      .addExtraButton(button => button
-        .setIcon('eye')
-        .setTooltip('Toggle visibility')
-        .onClick(() => {
-          // TODO: Implement password toggle
-        }));
-    
-    // Obsidian Integration Section
-    containerEl.createEl('h3', { text: 'Obsidian Integration' });
-    
-    new Setting(containerEl)
-      .setName('Target Folder')
-      .setDesc('Folder where meeting notes will be created')
-      .addText(text => text
-        .setPlaceholder('Meetings')
-        .setValue(this.plugin.settings.targetFolder)
-        .onChange(async (value) => {
-          this.plugin.settings.targetFolder = value;
-          await this.plugin.saveSettings();
-        }));
-    
-    // Add more settings sections as needed...
-    // The full settings implementation will be completed in task 3.0
   }
 }
