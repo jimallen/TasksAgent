@@ -1,6 +1,8 @@
 # Meeting Tasks Plugin for Obsidian
 
-Automatically import meeting tasks and notes from email transcripts using AI-powered extraction. This plugin connects to your local TasksAgent service to process meeting transcripts from Gmail and create structured notes in Obsidian.
+Automatically import meeting tasks and notes from email transcripts using AI-powered extraction. This plugin connects to your local Gmail MCP server to process meeting transcripts and create structured notes with actionable tasks in Obsidian.
+
+📐 **[View System Architecture Diagram](./docs/system-architecture.md)** - Detailed technical documentation with architecture diagrams
 
 ## Features
 

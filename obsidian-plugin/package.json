@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node esbuild.config.js",
     "build": "tsc --noEmit && node esbuild.config.js production",
+    "build:mcp": "node esbuild.mcp.js production",
+    "dev:mcp": "node esbuild.mcp.js",
     "build:release": "NODE_ENV=production node build.js",
     "build:dev": "node build.js",
     "test": "jest",
@@ -40,6 +42,8 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@gongrzhe/server-gmail-autoauth-mcp": "^1.1.11",
+    "@modelcontextprotocol/sdk": "^1.17.3",
     "@types/moment": "^2.11.29",
     "@types/moment-timezone": "^0.5.13",
     "moment": "^2.30.1",
