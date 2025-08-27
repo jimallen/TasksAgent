@@ -5,6 +5,7 @@
 
 import express from 'express';
 import cors from 'cors';
+import * as net from 'net';
 import { DaemonService } from './service';
 import logger from '../utils/logger';
 
@@ -28,6 +29,25 @@ export class DaemonHttpServer {
     
     // Setup routes
     this.setupRoutes();
+  }
+
+  private async checkPortAvailable(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const tester = net.createServer()
+        .once('error', (err: any) => {
+          if (err.code === 'EADDRINUSE') {
+            resolve(false);
+          } else {
+            resolve(false);
+          }
+        })
+        .once('listening', () => {
+          tester.close(() => {
+            resolve(true);
+          });
+        })
+        .listen(port);
+    });
   }
 
   private setupRoutes(): void {
@@ -140,6 +160,45 @@ export class DaemonHttpServer {
   }
 
   async start(): Promise<void> {
+    // Check for environment variable override
+    const envPort = process.env['HTTP_SERVER_PORT'];
+    if (envPort) {
+      const parsedPort = parseInt(envPort, 10);
+      if (!isNaN(parsedPort) && parsedPort > 0 && parsedPort < 65536) {
+        this.port = parsedPort;
+        logger.info(`[HTTP Server] Using port ${this.port} from HTTP_SERVER_PORT environment variable`);
+      } else {
+        logger.warn(`[HTTP Server] Invalid HTTP_SERVER_PORT value: ${envPort}, using default port ${this.port}`);
+      }
+    }
+
+    // Check if port is available before trying to start
+    const isAvailable = await this.checkPortAvailable(this.port);
+    if (!isAvailable) {
+      logger.warn(`[HTTP Server] Port ${this.port} is not available, attempting to find alternative port...`);
+      
+      // Try a few alternative ports
+      const alternativePorts = [3003, 3004, 3005, 8080, 8081];
+      let foundPort = false;
+      
+      for (const altPort of alternativePorts) {
+        if (await this.checkPortAvailable(altPort)) {
+          this.port = altPort;
+          logger.info(`[HTTP Server] Using alternative port ${this.port}`);
+          foundPort = true;
+          break;
+        }
+      }
+      
+      if (!foundPort) {
+        logger.error(`[HTTP Server] No available ports found. Tried: ${this.port}, ${alternativePorts.join(', ')}`);
+        logger.error(`[HTTP Server] To fix this issue:`);
+        logger.error(`[HTTP Server]   1. Kill the process using port: lsof -ti:${this.port} | xargs kill -9`);
+        logger.error(`[HTTP Server]   2. Set HTTP_SERVER_PORT environment variable to a different port`);
+        throw new Error(`No available ports found for HTTP server`);
+      }
+    }
+
     return new Promise((resolve, reject) => {
       this.server = this.app.listen(this.port, () => {
         this.running = true;
@@ -169,19 +228,36 @@ export class DaemonHttpServer {
       this.server.on('error', (error: any) => {
         if (error.code === 'EADDRINUSE') {
           logger.error(`[HTTP Server] Port ${this.port} is already in use`);
+          logger.error('[HTTP Server] This usually means another instance is already running');
           logger.error('[HTTP Server] Possible solutions:');
           logger.error(`[HTTP Server]   1. Kill the process using port ${this.port}: lsof -ti:${this.port} | xargs kill -9`);
           logger.error(`[HTTP Server]   2. Use a different port by setting HTTP_SERVER_PORT environment variable`);
-          logger.error(`[HTTP Server]   3. Wait for the other process to finish`);
+          logger.error(`[HTTP Server]   3. Check for other running instances: ps aux | grep "npm run daemon"`);
+          logger.error(`[HTTP Server]   4. Wait for the other process to finish`);
           reject(new Error(`Port ${this.port} is already in use`));
         } else if (error.code === 'EACCES') {
           logger.error(`[HTTP Server] Permission denied to use port ${this.port}`);
           logger.error('[HTTP Server] Port numbers below 1024 require elevated privileges');
-          logger.error('[HTTP Server] Try using a port number above 1024 or run with sudo');
+          logger.error('[HTTP Server] Possible solutions:');
+          logger.error('[HTTP Server]   1. Use a port number above 1024 (e.g., 3002, 8080)');
+          logger.error('[HTTP Server]   2. Set HTTP_SERVER_PORT=8080 in your environment');
+          logger.error('[HTTP Server]   3. Run with elevated privileges (not recommended): sudo npm run daemon');
           reject(new Error(`Permission denied for port ${this.port}`));
+        } else if (error.code === 'ENOTFOUND' || error.code === 'ENOENT') {
+          logger.error(`[HTTP Server] Network or filesystem error: ${error.message}`);
+          logger.error('[HTTP Server] Possible solutions:');
+          logger.error('[HTTP Server]   1. Check network connectivity');
+          logger.error('[HTTP Server]   2. Verify filesystem permissions');
+          logger.error('[HTTP Server]   3. Restart the daemon service');
+          reject(error);
         } else {
-          logger.error(`[HTTP Server] Failed to start on port ${this.port}: ${error.message}`);
+          logger.error(`[HTTP Server] Unexpected error starting on port ${this.port}: ${error.message}`);
           logger.error(`[HTTP Server] Error code: ${error.code || 'unknown'}`);
+          logger.error('[HTTP Server] Possible solutions:');
+          logger.error('[HTTP Server]   1. Check system logs for more details');
+          logger.error('[HTTP Server]   2. Try a different port with HTTP_SERVER_PORT environment variable');
+          logger.error('[HTTP Server]   3. Restart the daemon service');
+          logger.error('[HTTP Server]   4. Check firewall/security settings');
           reject(error);
         }
       });
