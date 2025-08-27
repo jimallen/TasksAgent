@@ -209,4 +209,8 @@ export class DaemonHttpServer {
   isRunning(): boolean {
     return this.running;
   }
+
+  getPort(): number {
+    return this.port;
+  }
 }

@@ -3,6 +3,7 @@ import { EmailProcessor } from '../processors/emailProcessor';
 import logger from '../utils/logger';
 import Database from 'better-sqlite3';
 import * as path from 'path';
+import { DaemonHttpServer } from './httpServer';
 
 export interface ServiceStats {
   startTime: Date;
@@ -16,6 +17,8 @@ export interface ServiceStats {
   errors: string[];
   status: 'running' | 'stopped' | 'processing' | 'error';
   nextScheduledRun: Date | null;
+  httpServerRunning?: boolean;
+  httpServerPort?: number;
 }
 
 export class DaemonService extends EventEmitter {
@@ -24,10 +27,12 @@ export class DaemonService extends EventEmitter {
   private db: Database.Database;
   private isProcessing = false;
   private stopRequested = false;
+  private httpServer?: DaemonHttpServer;
 
-  constructor() {
+  constructor(httpServer?: DaemonHttpServer) {
     super();
     this.processor = new EmailProcessor();
+    this.httpServer = httpServer;
     this.stats = {
       startTime: new Date(),
       lastRun: null,
@@ -219,7 +224,15 @@ export class DaemonService extends EventEmitter {
   }
 
   getStats(): ServiceStats {
-    return { ...this.stats };
+    const stats = { ...this.stats };
+    
+    // Include HTTP server status if available
+    if (this.httpServer) {
+      stats.httpServerRunning = this.httpServer.isRunning();
+      stats.httpServerPort = this.httpServer.getPort();
+    }
+    
+    return stats;
   }
 
   getNextScheduledRuns(): Date[] {
@@ -291,7 +304,10 @@ export class DaemonService extends EventEmitter {
     }
   }
 
-  cleanup(): void {
+  async cleanup(): Promise<void> {
+    if (this.httpServer) {
+      await this.httpServer.stop();
+    }
     this.db.close();
   }
 }

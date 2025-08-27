@@ -26,14 +26,19 @@ let httpServer: DaemonHttpServer | null = null;
 async function startDaemon() {
   logger.info('Starting Meeting Transcript Agent Daemon...');
   
-  const service = new DaemonService();
-  httpServer = new DaemonHttpServer(service, 3002);
+  // Create HTTP server first
+  const tempHttpServer = new DaemonHttpServer(null as any, 3002);
+  
+  // Create service with HTTP server reference
+  const service = new DaemonService(tempHttpServer);
+  
+  // Now update the HTTP server with the service reference
+  (tempHttpServer as any).daemonService = service;
+  httpServer = tempHttpServer;
   
   // Start HTTP server for external triggers
   try {
     await httpServer.start();
-    // Pass httpServer reference to service for lifecycle management
-    (service as any).httpServer = httpServer;
   } catch (error) {
     logger.error('Failed to start HTTP server:', error);
     logger.warn('Continuing without HTTP API - daemon will run but API endpoints will not be available');
@@ -52,7 +57,7 @@ async function startDaemon() {
         await httpServer.stop();
       }
       await service.stop();
-      service.cleanup();
+      await service.cleanup();
       process.exit(0);
     });
     
@@ -62,7 +67,7 @@ async function startDaemon() {
         await httpServer.stop();
       }
       await service.stop();
-      service.cleanup();
+      await service.cleanup();
       process.exit(0);
     });
     
@@ -97,7 +102,7 @@ async function startDaemon() {
           logger.error('Error stopping HTTP server during uncaught exception:', stopError);
         }
       }
-      service.cleanup();
+      await service.cleanup();
       process.exit(1);
     });
     
