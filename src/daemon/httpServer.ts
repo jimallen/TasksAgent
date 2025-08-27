@@ -13,6 +13,8 @@ export class DaemonHttpServer {
   private daemonService: DaemonService;
   private port: number;
   private server: any;
+  private running: boolean = false;
+  private connections: Set<any> = new Set();
 
   constructor(daemonService: DaemonService, port = 3000) {
     this.daemonService = daemonService;
@@ -128,8 +130,18 @@ export class DaemonHttpServer {
   }
 
   async start(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.server = this.app.listen(this.port, () => {
+        this.running = true;
+        
+        // Track connections for graceful shutdown
+        this.server.on('connection', (connection: any) => {
+          this.connections.add(connection);
+          connection.on('close', () => {
+            this.connections.delete(connection);
+          });
+        });
+        
         logger.info(`Daemon HTTP server running on http://localhost:${this.port}`);
         logger.info('Available endpoints:');
         logger.info('  GET  /health - Health check');
@@ -140,17 +152,61 @@ export class DaemonHttpServer {
         logger.info('  POST /reset - Reset processed emails data');
         resolve();
       });
+      
+      // Handle errors during startup
+      this.server.on('error', (error: any) => {
+        if (error.code === 'EADDRINUSE') {
+          logger.error(`[HTTP Server] Port ${this.port} is already in use`);
+          logger.error('[HTTP Server] Possible solutions:');
+          logger.error(`[HTTP Server]   1. Kill the process using port ${this.port}: lsof -ti:${this.port} | xargs kill -9`);
+          logger.error(`[HTTP Server]   2. Use a different port by setting HTTP_SERVER_PORT environment variable`);
+          logger.error(`[HTTP Server]   3. Wait for the other process to finish`);
+          reject(new Error(`Port ${this.port} is already in use`));
+        } else if (error.code === 'EACCES') {
+          logger.error(`[HTTP Server] Permission denied to use port ${this.port}`);
+          logger.error('[HTTP Server] Port numbers below 1024 require elevated privileges');
+          logger.error('[HTTP Server] Try using a port number above 1024 or run with sudo');
+          reject(new Error(`Permission denied for port ${this.port}`));
+        } else {
+          logger.error(`[HTTP Server] Failed to start on port ${this.port}: ${error.message}`);
+          logger.error(`[HTTP Server] Error code: ${error.code || 'unknown'}`);
+          reject(error);
+        }
+      });
     });
   }
 
   async stop(): Promise<void> {
     if (this.server) {
       return new Promise((resolve) => {
+        // Set a timeout to force close after 5 seconds
+        const forceCloseTimeout = setTimeout(() => {
+          logger.warn('Force closing HTTP server after 5 second timeout');
+          for (const connection of this.connections) {
+            connection.destroy();
+          }
+          this.connections.clear();
+          this.running = false;
+          resolve();
+        }, 5000);
+        
+        // Close all tracked connections
+        for (const connection of this.connections) {
+          connection.destroy();
+        }
+        this.connections.clear();
+        
         this.server.close(() => {
-          logger.info('Daemon HTTP server stopped');
+          clearTimeout(forceCloseTimeout);
+          this.running = false;
+          logger.info('Daemon HTTP server stopped gracefully');
           resolve();
         });
       });
     }
+  }
+
+  isRunning(): boolean {
+    return this.running;
   }
 }
