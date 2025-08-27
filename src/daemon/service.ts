@@ -208,13 +208,27 @@ export class DaemonService extends EventEmitter {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Processing failed:', error);
       this.logError(errorMessage);
-      this.stats.status = 'error';
+      
+      // Emit processing failed event
       this.emit('processingFailed', error);
+      
+      // Update stats after error
+      this.isProcessing = false;
+      if (!this.stopRequested) {
+        this.stats.status = 'error'; // Keep error status
+        this.stats.nextScheduledRun = null;
+      }
+      this.saveStats();
+      this.emit('statusChanged', this.stats.status);
+      
       throw error; // Re-throw for HTTP endpoint to handle
     } finally {
       this.isProcessing = false;
       if (!this.stopRequested) {
-        this.stats.status = 'running';
+        // Don't override error status if processing failed
+        if (this.stats.status !== 'error') {
+          this.stats.status = 'running';
+        }
         // No scheduled runs in manual-only mode
         this.stats.nextScheduledRun = null;
       }
@@ -306,7 +320,11 @@ export class DaemonService extends EventEmitter {
 
   async cleanup(): Promise<void> {
     if (this.httpServer) {
-      await this.httpServer.stop();
+      try {
+        await this.httpServer.stop();
+      } catch (error) {
+        logger.error('Error stopping HTTP server during cleanup:', error);
+      }
     }
     this.db.close();
   }
