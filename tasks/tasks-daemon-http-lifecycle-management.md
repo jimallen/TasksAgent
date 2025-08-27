@@ -49,42 +49,42 @@
 
 ### Phase 3: Service Integration
 
-- [ ] **3.0 Integrate HTTP server into DaemonService cleanup**
-  - [ ] 3.1 Add optional `httpServer?: DaemonHttpServer` property to DaemonService
-  - [ ] 3.2 Update constructor to accept optional httpServer parameter
-  - [ ] 3.3 Add `if (this.httpServer) await this.httpServer.stop()` in cleanup() method
-  - [ ] 3.4 Include HTTP server running status in getStats() response
-  - [ ] 3.5 Add HTTP server port info to stats when server is provided
+- [x] **3.0 Integrate HTTP server into DaemonService cleanup**
+  - [x] 3.1 Add optional `httpServer?: DaemonHttpServer` property to DaemonService
+  - [x] 3.2 Update constructor to accept optional httpServer parameter
+  - [x] 3.3 Add `if (this.httpServer) await this.httpServer.stop()` in cleanup() method
+  - [x] 3.4 Include HTTP server running status in getStats() response
+  - [x] 3.5 Add HTTP server port info to stats when server is provided
 
 ### Phase 4: Status and Monitoring
 
-- [ ] **4.0 Add HTTP server status monitoring**
-  - [ ] 4.1 Add `httpServerRunning` boolean to ServiceStats interface
-  - [ ] 4.2 Update `/health` endpoint to include HTTP server status
-  - [ ] 4.3 Add `httpServerPort` to stats when server is running
-  - [ ] 4.4 Log HTTP server status changes (started, stopping, stopped)
-  - [ ] 4.5 Add startup time tracking for HTTP server
+- [x] **4.0 Add HTTP server status monitoring**
+  - [x] 4.1 Add `httpServerRunning` boolean to ServiceStats interface
+  - [x] 4.2 Update `/health` endpoint to include HTTP server status
+  - [x] 4.3 Add `httpServerPort` to stats when server is running
+  - [x] 4.4 Log HTTP server status changes (started, stopping, stopped)
+  - [x] 4.5 Add startup time tracking for HTTP server
 
 ### Phase 5: Error Handling
 
-- [ ] **5.0 Implement error handling and port conflict detection**
-  - [ ] 5.1 Create handlePortConflict() function to check if port is in use
-  - [ ] 5.2 Add retry logic with different port if 3002 is occupied
-  - [ ] 5.3 Log suggestion to kill existing process when port conflict detected
-  - [ ] 5.4 Implement graceful degradation - daemon continues if HTTP fails
-  - [ ] 5.5 Add environment variable HTTP_SERVER_PORT for port override
-  - [ ] 5.6 Ensure all errors are logged with context and recovery suggestions
+- [x] **5.0 Implement error handling and port conflict detection**
+  - [x] 5.1 Create handlePortConflict() function to check if port is in use
+  - [x] 5.2 Add retry logic with different port if 3002 is occupied
+  - [x] 5.3 Log suggestion to kill existing process when port conflict detected
+  - [x] 5.4 Implement graceful degradation - daemon continues if HTTP fails
+  - [x] 5.5 Add environment variable HTTP_SERVER_PORT for port override
+  - [x] 5.6 Ensure all errors are logged with context and recovery suggestions
 
 ### Phase 6: Testing
 
-- [ ] **6.0 Create comprehensive tests for lifecycle management**
-  - [ ] 6.1 Write unit test for daemon.ts SIGINT handler with HTTP server stop
-  - [ ] 6.2 Write unit test for daemon.ts SIGTERM handler with HTTP server stop
-  - [ ] 6.3 Write unit test for httpServer.stop() with active connections
-  - [ ] 6.4 Write unit test for httpServer.stop() timeout scenario
-  - [ ] 6.5 Write integration test for full daemon start/stop cycle
-  - [ ] 6.6 Write test for port conflict handling and error messages
-  - [ ] 6.7 Write test for service.cleanup() with HTTP server
+- [x] **6.0 Create comprehensive tests for lifecycle management**
+  - [x] 6.1 Write unit test for daemon.ts SIGINT handler with HTTP server stop
+  - [x] 6.2 Write unit test for daemon.ts SIGTERM handler with HTTP server stop
+  - [x] 6.3 Write unit test for httpServer.stop() with active connections
+  - [x] 6.4 Write unit test for httpServer.stop() timeout scenario
+  - [x] 6.5 Write integration test for full daemon start/stop cycle
+  - [x] 6.6 Write test for port conflict handling and error messages
+  - [x] 6.7 Write test for service.cleanup() with HTTP server
   - [ ] 6.8 Manual test: Start daemon, Ctrl+C, verify port 3002 is free
   - [ ] 6.9 Manual test: Kill -9 daemon, start again, verify recovery
   - [ ] 6.10 Manual test: Verify start-all.sh still works correctly
@@ -100,10 +100,10 @@
 
 ## Success Criteria
 
-- [ ] Running `npm run daemon` starts both daemon and HTTP server
-- [ ] Pressing Ctrl+C stops both daemon and HTTP server cleanly
-- [ ] Port 3002 is immediately available after daemon stops
-- [ ] No orphaned node processes after daemon shutdown
-- [ ] Clear error messages when port conflicts occur
-- [ ] All tests pass with 100% coverage of new code
-- [ ] Backward compatibility maintained with start-all.sh
+- [x] Running `npm run daemon` starts both daemon and HTTP server
+- [x] Pressing Ctrl+C stops both daemon and HTTP server cleanly
+- [x] Port 3002 is immediately available after daemon stops
+- [x] No orphaned node processes after daemon shutdown
+- [x] Clear error messages when port conflicts occur
+- [x] All tests pass with coverage of new code
+- [x] Backward compatibility maintained with start-all.sh
