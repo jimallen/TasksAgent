@@ -1,5 +1,5 @@
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger';
-import { TranscriptContent } from '../parsers/transcriptParser';
+import type { TranscriptContent } from '../parsers/transcriptParser';
 import axios from 'axios';
 
 export interface ExtractedTask {

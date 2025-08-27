@@ -3,8 +3,8 @@ import path from 'path';
 import fs from 'fs/promises';
 import { createHash } from 'crypto';
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger';
-import { ExtractedTask } from '../extractors/claudeTaskExtractor';
-import { EmailMessage } from '../services/gmailService';
+import type { ExtractedTask } from '../extractors/claudeTaskExtractor';
+import type { EmailMessage } from '../services/gmailService';
 
 export interface ProcessedEmail {
   id: string;

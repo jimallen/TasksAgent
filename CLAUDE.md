@@ -1,130 +1,179 @@
-# CLAUDE.md - AI Assistant Context
+# CLAUDE.md
 
-## Project Overview
-**Meeting Transcript Agent** - An automated system that monitors Gmail for meeting transcripts, extracts actionable tasks using Claude AI, and creates organized notes in Obsidian.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current Status
-- ✅ **Production Ready** - All core features implemented and tested
-- ✅ **Gmail Integration** - Connected via Gmail MCP with OAuth authentication
-- ✅ **AI Task Extraction** - Claude API integration for intelligent task extraction
-- ✅ **Obsidian Integration** - Creates structured meeting notes with tasks
-- ✅ **Error Handling** - Comprehensive error handling and logging
+## Project: Meeting Transcript Agent
+Automated system that monitors Gmail for meeting transcripts, extracts actionable tasks using Claude AI, and creates organized notes in Obsidian with optional daemon service and TUI monitoring.
 
-## Quick Commands
+## Essential Commands
+
+### Development & Testing
 ```bash
-# Test the system
-npm run start:test
-
-# Process emails once
-npm run start:once
-
-# Run with scheduler (classic mode)
-npm start
-
-# NEW: Run daemon with TUI
-npm run daemon
-
-# Run daemon in background
-npm run daemon:headless
-
-# Check logs
-tail -f logs/app.log
-tail -f logs/error.log
+npm run build           # TypeScript compilation (required before running)
+npm run typecheck       # Type checking without emitting files
+npm run lint            # ESLint with TypeScript rules
+npm run lint:fix        # Auto-fix linting issues
+npm run format          # Prettier formatting
+npm test               # Run Jest tests
+npm run test:coverage  # Test coverage report
 ```
 
-## Key Files to Know
+### Running the Application
+```bash
+npm run start:test     # Test mode - verify all connections
+npm run start:once     # Process emails once and exit
+npm start              # Classic scheduler mode (9 AM, 1 PM, 5 PM)
+npm run daemon         # Daemon with TUI dashboard (recommended)
+npm run daemon:headless # Daemon without UI (for servers)
 
-### Core Files
-- `src/index.ts` - Main entry point and orchestration
-- `src/services/gmailService.ts` - Gmail MCP integration
-- `src/extractors/claudeTaskExtractor.ts` - Claude AI task extraction
-- `src/parsers/emailParser.ts` - Email pattern recognition
-- `src/services/obsidianService.ts` - Obsidian note creation
-- `.env` - Configuration (DO NOT commit)
+# Starting both services (Gmail MCP + Daemon)
+./start-all.sh         # Starts both services in background
+./stop-all.sh          # Stops both services
+```
 
-### Daemon Service Files (NEW)
-- `src/daemon.ts` - Daemon entry point
-- `src/daemon/service.ts` - Background service logic
-- `src/tui/interface.ts` - Terminal UI implementation
-- `src/processors/emailProcessor.ts` - Email processing wrapper
-- `daemon-stats.db` - Statistics database
+### Gmail MCP Setup
+```bash
+npx @gongrzhe/server-gmail-autoauth-mcp  # Authenticate Gmail MCP
+```
+**Full setup guide**: See [docs/GMAIL_SETUP.md](docs/GMAIL_SETUP.md) for detailed OAuth configuration
 
-## Common Issues & Solutions
+## Architecture Overview
+
+### Processing Flow
+1. **Gmail MCP Server** (`src/services/gmailService.ts`) - OAuth-based email fetching via external MCP process
+2. **Email Parser** (`src/parsers/emailParser.ts`) - Identifies meeting transcripts by patterns
+3. **Claude AI Extractor** (`src/extractors/claudeTaskExtractor.ts`) - Extracts tasks using Anthropic API
+4. **Obsidian Service** (`src/services/obsidianService.ts`) - Creates structured notes in vault
+5. **State Manager** (`src/database/stateManager.ts`) - SQLite-based deduplication
+6. **Notification Service** (`src/services/notificationService.ts`) - Multi-channel alerts
+
+### HTTP Server Architecture
+- **Port 3000**: Gmail MCP HTTP wrapper (`scripts/gmail-mcp-http.js`) - Bridges stdio-based MCP to HTTP
+- **Port 3002**: Daemon HTTP API (`src/daemon/httpServer.ts`) - Control interface for daemon service
+- **Why Two Servers**: See [HTTP Server Architecture](docs/ARCHITECTURE_HTTP_SERVERS.md) for detailed explanation
+
+### Daemon Service Architecture
+- `src/daemon.ts` - Entry point with TUI/headless mode detection
+- `src/daemon/service.ts` - Background service with manual trigger support
+- `src/daemon/httpServer.ts` - HTTP API for external control (port 3002)
+- `src/tui/interface.ts` - blessed-based terminal UI with statistics
+- `daemon-stats.db` - Persistent metrics storage
+
+### Key Design Patterns
+- **MCP Protocol**: Gmail integration uses Model Context Protocol server running on port 3000
+- **Rate Limiting**: Built-in protection for Gmail API quotas (250 units/sec)
+- **Error Recovery**: Comprehensive error handling with retry logic
+- **State Management**: SQLite for processed email tracking and deduplication
+- **Configurable Platforms**: Plugin settings control which meeting platforms to search
+- **Lookback Hours**: Configurable via plugin settings and passed to daemon API
+
+## Critical Configuration
+
+### Required Environment Variables (.env)
+```bash
+OBSIDIAN_VAULT_PATH=/absolute/path/to/vault  # Required
+ANTHROPIC_API_KEY=sk-ant-api03-xxx          # Recommended for AI extraction
+GMAIL_HOURS_LOOKBACK=120                    # Default: 120 hours (5 days)
+```
+
+### Gmail MCP Authentication
+OAuth credentials must be in one of:
+- `~/.gmail-mcp/gcp-oauth.keys.json` (preferred)
+- `./gcp-oauth.keys.json` (project root)
+
+## Common Development Tasks
+
+### Adding New Email Patterns
+Edit `src/parsers/emailParser.ts`:
+- Current patterns: "Notes:", "Recording of", "Transcript for", "Meeting notes"
+- Pattern matching is case-insensitive
+
+### Modifying Task Extraction
+Edit `src/extractors/claudeTaskExtractor.ts`:
+- Uses Claude 3 Haiku model by default
+- Structured prompt for consistent task formatting
+
+### Updating Notification Channels
+Edit `src/services/notificationService.ts`:
+- Supported: console, desktop, obsidian, slack
+- Desktop uses `notify-send` on Linux (fixed hint syntax)
+
+### Database Schema Changes
+Edit `src/database/schema.sql`:
+- Run migrations manually after changes
+- State tracking in `data/state.db`
+
+## Testing Workflow
+1. Verify Gmail connection: `npm run start:test`
+2. Check TypeScript: `npm run typecheck`
+3. Run linter: `npm run lint`
+4. Execute tests: `npm test`
+5. Test email processing: `npm run start:once`
+
+## Troubleshooting Guide
 
 ### Gmail Not Finding Emails
-- Check patterns in `src/parsers/emailParser.ts`
-- Verify search window in `.env` (GMAIL_HOURS_LOOKBACK=120 for 5 days)
-- Current patterns: "Notes:", "Recording of", "Transcript for", "Meeting notes"
+- Check lookback hours in Obsidian plugin settings (passed to daemon)
+- Verify enabled meeting platforms in plugin settings
+- Verify patterns in `src/parsers/emailParser.ts`
 - Gmail MCP tools: `search_emails`, `read_email` (not `gmail_*` prefixed)
+- Ensure Gmail MCP HTTP server is running on port 3000
 
-### Tasks Not Extracting
-- Verify ANTHROPIC_API_KEY in `.env`
-- Check Claude API limits
-- Review transcript format in logs
+### Claude API Issues
+- Verify `ANTHROPIC_API_KEY` in .env
+- Check rate limits (default: 3 retries with exponential backoff)
+- Model defaults to `claude-3-haiku-20240307`
 
-### Notifications Failing
-- Desktop: Uses `notify-send` on Linux (fixed hint syntax issue)
-- Disable Slack if webhook not configured (removed from default channels)
-- Check NOTIFICATION_CHANNELS in `.env` (default: console,desktop)
+### Desktop Notifications Failing
+- Linux: Install `libnotify-bin` package
+- Check `NOTIFICATION_CHANNELS` in .env
+- Slack webhook must be configured if enabled
 
-## Testing Checklist
-When making changes, test:
-1. [ ] Gmail connection: `npx @gongrzhe/server-gmail-autoauth-mcp auth`
-2. [ ] TypeScript builds: `npm run build`
-3. [ ] Test mode works: `npm run start:test`
-4. [ ] Email search works: `npm run start:once`
-5. [ ] No errors in logs: `cat logs/error.log`
+### Daemon Service Issues
+- TUI requires terminal with color support
+- Headless mode for non-interactive environments (`--headless` flag)
+- Statistics persist in `daemon-stats.db`
+- HTTP API runs on port 3002 for external control
+- Manual trigger only mode (`--manual-only` flag)
 
-## Architecture Notes
-- **Gmail MCP**: External server process for Gmail OAuth
-- **Processing Flow**: Gmail → Parser → AI → Obsidian → Notifications
-- **State Management**: SQLite for deduplication
-- **Scheduling**: Cron-based (9 AM, 1 PM, 5 PM)
-- **Daemon Service**: Background process with TUI monitoring
-- **TUI Framework**: blessed + blessed-contrib for terminal interface
-- **Statistics**: Persistent metrics in daemon-stats.db
-
-## Environment Variables
-Critical settings in `.env`:
-- `ANTHROPIC_API_KEY` - Required for task extraction
-- `OBSIDIAN_VAULT_PATH` - Where to create notes
-- `GMAIL_HOURS_LOOKBACK` - How far back to search (default: 120 hours)
-- `NOTIFICATION_CHANNELS` - Where to send notifications
-
-## Development Workflow
-1. Make changes
-2. Run `npm run build`
-3. Test with `npm run start:test`
-4. Check logs for errors
-5. Run full test with `npm run start:once`
-
-## Known Limitations
-- Gmail MCP must be authenticated before use
-- Requires active internet for AI processing
-- Limited to text-based transcript formats
-- Desktop notifications require system support
-
-## Future Enhancements
-- [ ] Support for more meeting platforms
-- [ ] Local AI option for privacy
-- [ ] Web UI for configuration
-- [ ] Real-time email monitoring
-- [ ] Custom task extraction rules
-
-## Debugging Tips
-- Enable debug logs: `LOG_LEVEL=debug npm start`
-- Check Gmail MCP: `npx @gongrzhe/server-gmail-autoauth-mcp`
-- Verify OAuth: Check `~/.gmail-mcp/credentials.json`
-- Test AI extraction: See `src/extractors/claudeTaskExtractor.test.ts`
-
-## Performance Notes
-- Processes up to 50 emails per run
-- 5-day lookback window by default
+## Performance Considerations
+- Processes up to 50 emails per run (configurable)
 - ~2-5 seconds per transcript for AI processing
-- Minimal memory usage (~100-200MB)
+- Rate limiting: 250 Gmail API units/second
+- Memory usage: ~100-200MB typical
+- SQLite handles 100K+ records efficiently
 
-## Security Considerations
-- OAuth tokens in `~/.gmail-mcp/` (user-only permissions)
+## Security Notes
+- OAuth tokens: `~/.gmail-mcp/` (user-only permissions)
 - API keys in `.env` (never commit)
-- No transcript content cached
-- All logs sanitized for sensitive data
+- No transcript content cached in logs
+- Sensitive data sanitized in error messages
+
+## TypeScript Configuration
+- Strict mode enabled with all checks
+- Target: ES2020, Module: CommonJS
+- Source maps enabled for debugging
+- Declaration files generated
+
+## Obsidian Plugin
+The repository includes a companion Obsidian plugin in `obsidian-plugin/` directory:
+
+### Plugin Features
+- Visual task dashboard with priority sections
+- Configurable meeting platforms (Google Meet, Zoom, Teams, Generic)
+- Configurable lookback hours (how far back to search)
+- HTTP communication with daemon service
+- Settings UI for API keys and configuration
+- "My Tasks" filtering with configurable user name
+
+### Plugin Setup
+```bash
+cd obsidian-plugin
+npm install
+npm run build           # Build from main-daemon-style.ts
+node build.js           # Alternative build method
+# Copy to vault: cp main.js manifest.json styles.css /path/to/vault/.obsidian/plugins/meeting-tasks/
+```
+
+**Full documentation**: See [obsidian-plugin/README.md](obsidian-plugin/README.md) and [obsidian-plugin/CLAUDE.md](obsidian-plugin/CLAUDE.md)
+- use @.agent.rules.md as the authority on how to structure and write code.

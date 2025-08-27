@@ -52,7 +52,7 @@ async function build() {
   try {
     // Main plugin build
     await esbuild.build({
-      entryPoints: ['src/main.ts'],
+      entryPoints: ['src/main-daemon-style.ts'],
       bundle: true,
       platform: 'browser',
       target: 'es2018',

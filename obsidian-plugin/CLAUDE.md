@@ -11,9 +11,15 @@
 - ✅ **Distribution Ready** - Generic, configurable for any user
 - ✅ **TypeScript Compliant** - Full TypeScript type checking enabled
 - ✅ **Documentation Complete** - Architecture diagrams and comprehensive docs
+- ✅ **UI Enhancements** - Edit buttons, proper flexbox layout, theme-aware styling
+- ✅ **Priority Support** - Both custom emojis and Obsidian's built-in syntax
 
-## 📐 Architecture
-See [System Architecture Documentation](./docs/system-architecture.md) for detailed diagrams and component descriptions.
+## 📐 Documentation
+
+- **[Quick Start Guide](./QUICK_START.md)** - Get started in 5 minutes
+- **[Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md)** - Comprehensive build instructions
+- **[System Architecture](./docs/system-architecture.md)** - Technical architecture and diagrams
+- **[HTTP Server Architecture](../docs/ARCHITECTURE_HTTP_SERVERS.md)** - Parent project architecture
 
 ## Quick Start
 
@@ -72,15 +78,23 @@ npm run gmail-mcp-http
 - **Visual Organization**:
   - Priority-based sections (High/Medium/Low)
   - Assignee-based task cards
-  - Statistics overview
+  - Statistics overview (Total, Completed, High Priority, Overdue)
 - **Interactive Features**:
   - Click to complete tasks
   - Filter by priority, date, assignee
   - Collapsible sections
+  - In-line task editing (priority and assignee)
+  - Toggle between "My Tasks" and "All Tasks" views
+- **UI Improvements** (Recent):
+  - Edit button in top-left corner of each task
+  - Proper flexbox layout for maintainability
+  - Theme-aware styling with CSS variables
+  - High-contrast metadata tags
+  - Support for Obsidian's built-in priority indicators (⏫ ⏬ 🔼 🔽)
 - **Personalization**:
-  - "My Tasks" filtering
-  - Configurable user name
-  - Optional task filtering
+  - "My Tasks" filtering with dashboard toggle
+  - Configurable user name for task filtering
+  - Scans entire vault for tasks (not just Meetings folder)
 
 ### Gmail Integration
 - **MCP Protocol**: Uses Gmail MCP server for OAuth authentication
@@ -159,17 +173,44 @@ curl http://localhost:3001/health
 
 ## Development Workflow
 
-### Building the Plugin
+### Quick Build & Deploy
 ```bash
-# TypeScript check (required - no errors)
-npm run typecheck
-
-# Build with esbuild
+# Production build (recommended)
 node esbuild.config.js production
 
-# Deploy to vault
-cp main.js "/path/to/vault/.obsidian/plugins/meeting-tasks/"
+# Development build (with source maps)
+node esbuild.config.js development
+
+# Type checking (run before commits)
+npm run typecheck
 ```
+
+### Deployment Options
+
+#### Option 1: Direct Copy
+```bash
+# Build first
+node esbuild.config.js production
+
+# Copy to vault
+cp main.js manifest.json styles.css "/path/to/vault/.obsidian/plugins/meeting-tasks/"
+
+# Restart Obsidian or use Ctrl/Cmd+R to reload
+```
+
+#### Option 2: Build Script
+```bash
+# Use the custom build script (includes validation)
+node build.js
+
+# This automatically:
+# - Validates required files
+# - Runs TypeScript checking
+# - Builds with esbuild
+# - Reports any issues
+```
+
+📚 **Full documentation**: See [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md)
 
 ### Testing
 1. **Gmail Connection**: Check MCP server health endpoint
@@ -196,6 +237,28 @@ cp main.js "/path/to/vault/.obsidian/plugins/meeting-tasks/"
 - Configurable dashboard filtering
 - Ready for Obsidian Community Plugins
 
+## Recent Changes (Latest Session)
+
+### Dashboard UI Improvements
+- Fixed edit button placement - now in top-left corner of each task item
+- Removed inline styles for better maintainability
+- Implemented proper flexbox layout structure
+- Fixed button contrast issues with theme-aware CSS variables
+- Enhanced metadata tag visibility with high-contrast colors
+- Added support for Obsidian's built-in priority syntax
+
+### Task Loading Enhancements
+- Extended task scanning to entire vault (not limited to Meetings folder)
+- Added support for daily notes and all markdown files
+- Improved "My Tasks" filtering logic
+- Added toggle button for My Tasks/All Tasks views
+
+### Code Quality
+- Removed debug borders and unnecessary styles
+- Consolidated CSS files (dashboard.css merged into styles.css)
+- Improved DOM structure for better performance
+- Enhanced TypeScript typing throughout
+
 ## Future Enhancements
 - [ ] Real-time email monitoring
 - [ ] Support for more meeting platforms
@@ -203,6 +266,8 @@ cp main.js "/path/to/vault/.obsidian/plugins/meeting-tasks/"
 - [ ] Task synchronization with external systems
 - [ ] Advanced analytics
 - [ ] Custom templates
+- [ ] Drag-and-drop task reordering
+- [ ] Task dependencies and subtasks
 
 ## Debugging Tips
 - Enable console: Ctrl+Shift+I (Dev Tools)

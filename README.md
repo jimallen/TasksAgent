@@ -9,13 +9,15 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 
 ## 📚 Documentation
 
-- [System Architecture](docs/system-architecture.md) - Detailed system design and components
+- [System Architecture](docs/system-architecture.md) - Detailed system design with mermaid diagrams
+- [HTTP Server Architecture](docs/ARCHITECTURE_HTTP_SERVERS.md) - Why two HTTP servers are needed
 - [Daemon Service Guide](docs/daemon-service.md) - Background service with TUI monitoring
 - [API Reference](docs/api-reference.md) - Complete API documentation
+- [Gmail Setup Guide](docs/GMAIL_SETUP.md) - Detailed Gmail MCP configuration
+- [Obsidian Plugin](obsidian-plugin/README.md) - Visual task dashboard plugin
 - [AI Context](CLAUDE.md) - Information for AI assistants
 - [Configuration Guide](#configuration) - Environment setup
 - [Troubleshooting](#troubleshooting) - Common issues and solutions
-- [Gmail Setup Guide](docs/GMAIL_SETUP.md) - Detailed Gmail MCP configuration
 
 ## ✨ Features
 

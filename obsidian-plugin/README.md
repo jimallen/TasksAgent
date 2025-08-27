@@ -2,7 +2,11 @@
 
 Automatically import meeting tasks and notes from email transcripts using AI-powered extraction. This plugin connects to your local Gmail MCP server to process meeting transcripts and create structured notes with actionable tasks in Obsidian.
 
+🚀 **[Quick Start Guide](./QUICK_START.md)** - Get started in 5 minutes
+
 📐 **[View System Architecture Diagram](./docs/system-architecture.md)** - Detailed technical documentation with architecture diagrams
+
+🔨 **[Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md)** - Comprehensive build and deployment instructions
 
 ## Features
 

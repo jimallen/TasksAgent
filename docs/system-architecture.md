@@ -12,12 +12,25 @@ graph TB
         GM[Gmail MCP Server]
         GN[Google Gemini Notes]
         GT[Google Meet Transcripts]
+        ZM[Zoom Recordings]
+        TM[Teams Transcripts]
+    end
+    
+    subgraph "HTTP Services Layer"
+        GMCPHTTP[Gmail MCP HTTP<br/>Port 3000<br/>stdio-to-HTTP bridge]
+        DAEMONHTTP[Daemon HTTP API<br/>Port 3002<br/>Control & Triggers]
     end
     
     subgraph "Daemon Service Layer"
         DS[DaemonService]
         TUI[TUI Interface]
         PROC[EmailProcessor]
+    end
+    
+    subgraph "Obsidian Plugin"
+        OPLUGIN[Meeting Tasks Plugin]
+        DASH[Task Dashboard]
+        SETTINGS[Plugin Settings]
     end
     
     subgraph "Core Agent"
@@ -27,12 +40,11 @@ graph TB
         CE[ClaudeTaskExtractor]
         OS[ObsidianService]
         NS[NotificationService]
-        CS[CronScheduler]
         SM[StateManager]
     end
     
     subgraph "External Services"
-        GMCP[Gmail MCP<br/>OAuth Authentication]
+        GMCP[Gmail MCP Process<br/>OAuth Authentication]
         CLAUDE[Claude AI API<br/>Task Extraction]
         OBS[Obsidian Vault<br/>Note Storage]
     end
@@ -41,18 +53,28 @@ graph TB
         DB[(SQLite Database)]
         STATS[(Daemon Stats DB)]
         LOGS[Log Files]
+        VDATA[(Plugin data.json)]
     end
     
     GM --> GMCP
     GN --> GMCP
     GT --> GMCP
+    ZM --> GMCP
+    TM --> GMCP
     
+    GMCP -.stdio.-> GMCPHTTP
+    GMCPHTTP -.HTTP.-> OPLUGIN
+    
+    OPLUGIN --> DAEMONHTTP
+    SETTINGS --> VDATA
+    OPLUGIN --> DASH
+    
+    DAEMONHTTP --> DS
     TUI --> DS
     DS --> PROC
     DS --> STATS
     PROC --> GS
     
-    GMCP --> GS
     GS --> EP
     EP --> TP
     TP --> CE
@@ -63,7 +85,6 @@ graph TB
     GS --> SM
     SM --> DB
     
-    CS --> GS
     OS --> NS
     CE --> NS
     
@@ -213,13 +234,14 @@ graph LR
 ## Daemon Service Architecture
 
 ### Overview
-The daemon service provides a persistent background process with real-time monitoring capabilities through a Terminal User Interface (TUI).
+The daemon service provides a persistent background process with real-time monitoring capabilities through a Terminal User Interface (TUI). It includes an embedded HTTP API server for external control and integration with the Obsidian plugin.
 
 ```mermaid
 graph TB
     subgraph "Daemon Components"
         DAEMON[daemon.ts<br/>Entry Point]
         SERVICE[DaemonService<br/>Core Service]
+        HTTP[DaemonHttpServer<br/>HTTP API]
         TUI[TUIInterface<br/>Terminal UI]
         PROC[EmailProcessor<br/>Wrapper]
     end
@@ -240,7 +262,9 @@ graph TB
     end
     
     DAEMON --> SERVICE
+    DAEMON --> HTTP
     DAEMON --> TUI
+    HTTP --> SERVICE
     SERVICE --> PROC
     SERVICE --> STATSDB
     PROC --> STATE
@@ -350,6 +374,76 @@ stateDiagram-v2
 - CPU: Burst usage during AI processing
 - Disk: Minimal (logs + SQLite database)
 - Network: Proportional to email volume
+
+## HTTP Server Architecture
+
+### Dual HTTP Server Design
+The system uses two separate HTTP servers for different purposes. See [HTTP Server Architecture Documentation](./ARCHITECTURE_HTTP_SERVERS.md) for detailed explanation.
+
+```mermaid
+graph LR
+    subgraph "Port 3000"
+        GMCPHTTP[Gmail MCP HTTP<br/>stdio-to-HTTP bridge]
+        GMCPSTDIO[Gmail MCP Process<br/>stdio communication]
+    end
+    
+    subgraph "Port 3002"
+        DAEMONAPI[Daemon HTTP API<br/>Control endpoints]
+        DAEMONCORE[Daemon Service<br/>Email processing]
+    end
+    
+    subgraph "Clients"
+        PLUGIN[Obsidian Plugin]
+        CURL[curl/HTTP clients]
+    end
+    
+    PLUGIN -->|Search emails| GMCPHTTP
+    PLUGIN -->|Trigger processing| DAEMONAPI
+    CURL -->|Status/Control| DAEMONAPI
+    
+    GMCPHTTP <-->|stdio| GMCPSTDIO
+    DAEMONAPI --> DAEMONCORE
+```
+
+#### Why Two Servers?
+1. **Gmail MCP HTTP (Port 3000)**: Required because Obsidian plugins cannot spawn processes or use stdio
+2. **Daemon HTTP API (Port 3002)**: Provides control interface for the daemon service
+
+They cannot be combined because Gmail MCP is an external NPM package that only supports stdio communication.
+
+## Meeting Platform Configuration
+
+The system supports configurable meeting platforms through the Obsidian plugin settings:
+
+```mermaid
+graph TB
+    subgraph "Plugin Settings"
+        PLAT[Meeting Platforms]
+        GMEET[Google Meet ✓]
+        ZOOM[Zoom ✓]
+        TEAMS[Teams ✗]
+        GENERIC[Generic Meetings ✓]
+    end
+    
+    subgraph "API Parameters"
+        PARAMS[{
+            lookbackHours: 520,
+            meetingPlatforms: {...}
+        }]
+    end
+    
+    subgraph "Email Search Queries"
+        Q1[from:gemini-notes@google.com]
+        Q2[from:noreply@zoom.us]
+        Q3[subject:"meeting notes"]
+    end
+    
+    PLAT --> PARAMS
+    PARAMS -->|/trigger endpoint| DAEMONAPI[Daemon API]
+    DAEMONAPI --> Q1
+    DAEMONAPI --> Q2
+    DAEMONAPI --> Q3
+```
 
 ## Deployment Options
 

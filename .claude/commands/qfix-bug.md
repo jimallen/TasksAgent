@@ -1,27 +1,58 @@
 ---
-description: Fix a bug using systematic debugging approach
+description: Fix bugs in existing codebases using systematic debugging
 ---
 
-# Bug Fix Workflow
+# Bug Fix Workflow for Existing Codebases
 
-Systematically identify, reproduce, fix, and verify bug corrections following best practices.
+Systematically identify, reproduce, fix, and verify bug corrections in existing codebases by understanding the system context first.
 
 ## Bug Fix Pipeline
 
 ```mermaid
 graph LR
-    A[Bug Report] --> B[Gather Info]
-    B --> C[Reproduce & Analyze]
-    C --> D[Create Fix Task List]
-    D --> E[Implement Fix]
-    E --> F[Validate & Deploy]
+    A[Bug Report] --> B[Analyze Codebase]
+    B --> C[Gather Info]
+    C --> D[Reproduce & Analyze]
+    D --> E[Create Fix Task List]
+    E --> F[Implement Fix]
+    F --> G[Validate & Deploy]
 ```
 
-## Phase 1: Information Gathering
+## Phase 1: Analyze Existing Codebase
+
+### Understanding the System Context
+
+**Before gathering bug information, analyze the codebase:**
+
+1. **Initial Code Exploration**
+   - Search for error messages or stack traces mentioned in bug report
+   - Identify the module/component where the bug likely occurs
+   - Map out dependencies and related components
+   - Check for similar patterns elsewhere that might have the same bug
+
+2. **Historical Analysis**
+   - Review recent commits in affected files (`git log -p --since="2 weeks ago"`)
+   - Check when problematic code was introduced (`git blame`)
+   - Look for related bug fixes in the same area
+   - Identify who last modified the code for context
+
+3. **Test Coverage Assessment**
+   - Check existing test coverage for the affected code
+   - Identify missing test scenarios
+   - Note testing patterns used in the codebase
+   - Determine if tests should have caught this bug
+
+4. **Architecture Understanding**
+   - Note the architectural patterns (MVC, hooks, services, etc.)
+   - Understand data flow through the affected components
+   - Identify integration points with other systems
+   - Check for configuration or environment dependencies
+
+## Phase 2: Information Gathering
 
 ### Check for Issue Tracking
 
-First, ask the user:
+After understanding the codebase, ask the user:
 > "Do you have a Linear ticket for this bug? If you have Linear configured via MCP, I can fetch the details directly."
 
 **Check MCP availability:**
@@ -61,6 +92,13 @@ if (linearAvailable) {
    ```markdown
    ## Bug: [Title]
    
+   ### Codebase Context
+   - **Affected Files**: [List of files likely involved]
+   - **Related Components**: [Dependencies and integrations]
+   - **Recent Changes**: [Relevant commits or PRs]
+   - **Test Coverage**: [Current test status]
+   - **Architecture Pattern**: [How this fits in the system]
+   
    ### Reproduction Steps
    1. [Step 1]
    2. [Step 2]
@@ -81,6 +119,11 @@ if (linearAvailable) {
    - Browser/Node version:
    - OS:
    - Related packages:
+   
+   ### Root Cause Analysis
+   - **Suspected Cause**: [Based on codebase analysis]
+   - **Similar Issues**: [Any patterns found elsewhere]
+   - **Why Tests Missed It**: [Gap analysis]
    ```
    
    **Save bug document**:
@@ -88,7 +131,7 @@ if (linearAvailable) {
    - **Save to**: `/tasks/bug-analysis-[issue-id].md`
    - Confirm: "Bug analysis saved to `/tasks/bug-analysis-[issue-id].md`"
 
-## Phase 2: Reproduction & Analysis
+## Phase 3: Reproduction & Analysis
 
 1. **Set Up Test Environment**
    - Create minimal reproduction case
@@ -130,11 +173,11 @@ if (linearAvailable) {
    - Determine why tests didn't catch it
    - Search for similar patterns that might have same bug
 
-## Phase 3: Create Fix Task List
+## Phase 4: Create Fix Task List
 
 ### Generate Bug Fix Tasks - Two Phase Process
 
-**Phase 3.1: Generate Parent Tasks**
+**Phase 4.1: Generate Parent Tasks**
 1. Analyze the bug and root cause
 2. Create 3-5 high-level tasks:
    - Reproduce and Test Setup
@@ -145,7 +188,7 @@ if (linearAvailable) {
 4. Ask: "I have generated the high-level bug fix tasks. Ready to generate the sub-tasks? Respond with 'Go' to proceed."
 5. **WAIT for user confirmation**
 
-**Phase 3.2: Generate Sub-Tasks** (After user says "Go")
+**Phase 4.2: Generate Sub-Tasks** (After user says "Go")
 1. Break down each parent task into specific actions
 2. Create structured task list file with this format:
 
@@ -187,7 +230,7 @@ if (linearAvailable) {
 4. **Save to file**: `/tasks/tasks-bug-[issue-id].md` or `/tasks/tasks-bug-[description].md`
 5. Show path to user: "Bug fix task list saved to `/tasks/tasks-bug-[issue-id].md`"
 
-## Phase 4: Implementation
+## Phase 5: Implementation
 
 ### Execute Bug Fix Tasks with Strict Protocol
 
@@ -237,7 +280,7 @@ if (linearAvailable) {
    - Handle edge cases discovered during analysis
    - Keep fix focused on the bug (resist scope creep)
 
-## Phase 5: Validation
+## Phase 6: Validation
 
 ### Quality Assurance
 
@@ -265,7 +308,7 @@ if (linearAvailable) {
    - Verify in different browsers/platforms if applicable
    - Confirm with bug reporter if possible
 
-## Phase 6: Documentation & Completion
+## Phase 7: Documentation & Completion
 
 ### Finalize the Fix
 
@@ -415,10 +458,16 @@ After completing the fix, document:
 ## Summary
 
 The bug fix workflow ensures:
-- Systematic approach to debugging
-- Proper test coverage for regressions
-- Minimal, focused fixes
-- Clear documentation and tracking
-- Knowledge sharing for prevention
+- **Codebase-aware debugging** - Understanding the system before fixing
+- **Context-driven analysis** - Using git history and architecture knowledge
+- **Systematic approach** - Following phases from analysis to validation
+- **Proper test coverage** - Regression tests and gap identification
+- **Minimal, focused fixes** - Respecting existing patterns and conventions
+- **Clear documentation** - Including codebase context in bug analysis
+- **Knowledge sharing** - Learning from patterns and preventing recurrence
 
-Remember: A good bug fix not only solves the immediate problem but also prevents similar issues in the future.
+Remember: In existing codebases, understanding the system context is as important as understanding the bug itself. A good bug fix not only solves the immediate problem but also:
+- Fits naturally into the existing architecture
+- Follows established patterns and conventions
+- Prevents similar issues elsewhere in the codebase
+- Improves test coverage for the future

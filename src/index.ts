@@ -10,46 +10,50 @@ import { stateManager } from './database/stateManager';
 import { notificationService } from './services/notificationService';
 import { cronScheduler } from './scheduler/cronScheduler';
 import { logInfo, logError, logWarn, logDebug } from './utils/logger';
-import { EmailMessage } from './services/gmailService';
+import type { EmailMessage } from './services/gmailService';
 
 export class MeetingTranscriptAgent {
   private isProcessing: boolean = false;
   private processedCount: number = 0;
   private errorCount: number = 0;
   private startTime: Date = new Date();
+  private quietMode: boolean = false;
 
   /**
    * Initialize all services
    */
-  async initialize(): Promise<void> {
-    logInfo('🚀 Initializing Meeting Transcript Agent...');
+  async initialize(quiet = false): Promise<void> {
+    this.quietMode = quiet;
+    if (!quiet) {
+      logInfo('🚀 Initializing Meeting Transcript Agent...');
+    }
 
     try {
       // Initialize configuration
       await config.load();
-      logInfo('✓ Configuration loaded');
+      if (!this.quietMode) logInfo('✓ Configuration loaded');
 
       // Initialize database
       await stateManager.initialize();
-      logInfo('✓ Database initialized');
+      if (!this.quietMode) logInfo('✓ Database initialized');
 
       // Initialize Gmail service
       await gmailServiceRateLimited.connect();
-      logInfo('✓ Gmail service connected');
+      if (!this.quietMode) logInfo('✓ Gmail service connected');
 
       // Initialize Obsidian service
       await obsidianService.initialize();
-      logInfo('✓ Obsidian vault initialized');
+      if (!this.quietMode) logInfo('✓ Obsidian vault initialized');
 
       // Initialize transcript parser
       await transcriptParser.initialize();
-      logInfo('✓ Transcript parser initialized');
+      if (!this.quietMode) logInfo('✓ Transcript parser initialized');
 
       // Setup scheduler with processing function
       cronScheduler.setProcessingFunction(() => this.processEmails());
-      logInfo('✓ Scheduler configured');
+      if (!this.quietMode) logInfo('✓ Scheduler configured');
 
-      logInfo('✅ All services initialized successfully');
+      if (!this.quietMode) logInfo('✅ All services initialized successfully');
     } catch (error) {
       logError('Failed to initialize services', error);
       throw error;
@@ -59,7 +63,11 @@ export class MeetingTranscriptAgent {
   /**
    * Main processing function
    */
-  async processEmails(): Promise<{ processed: number; tasksExtracted: number; notesCreated: number }> {
+  async processEmails(quiet = false, lookbackHours?: number): Promise<{ processed: number; tasksExtracted: number; notesCreated: number }> {
+    // Store quiet mode for future use (notifications, etc)
+    if (quiet) {
+      this.quietMode = quiet;
+    }
     if (this.isProcessing) {
       logWarn('Already processing emails, skipping this run');
       return { processed: 0, tasksExtracted: 0, notesCreated: 0 };
@@ -75,8 +83,8 @@ export class MeetingTranscriptAgent {
     try {
       logInfo('📧 Starting email processing session...');
 
-      // Fetch recent emails
-      const hoursBack = parseInt(config.gmail?.hoursToLookBack || '24');
+      // Fetch recent emails - use provided lookbackHours or fall back to config
+      const hoursBack = lookbackHours || parseInt(config.gmail?.hoursToLookBack || '24');
       const emails = await gmailServiceRateLimited.fetchRecentEmails(hoursBack);
       logInfo(`Found ${emails.length} emails from the last ${hoursBack} hours`);
 
@@ -170,8 +178,8 @@ export class MeetingTranscriptAgent {
       const duration = Date.now() - sessionStartTime;
       logInfo(`📊 Session complete: ${sessionProcessed} emails, ${sessionTasks} tasks, ${sessionErrors} errors in ${duration}ms`);
 
-      // Send summary notification if emails were processed
-      if (sessionProcessed > 0 || sessionErrors > 0) {
+      // Send summary notification if emails were processed (unless in quiet mode)
+      if (!this.quietMode && (sessionProcessed > 0 || sessionErrors > 0)) {
         await notificationService.send({
           title: '✅ Email Processing Complete',
           message: `Processed ${sessionProcessed} emails, extracted ${sessionTasks} tasks${sessionErrors > 0 ? `, ${sessionErrors} errors` : ''}`,
@@ -184,10 +192,12 @@ export class MeetingTranscriptAgent {
 
     } catch (error) {
       logError('Critical error in email processing', error);
-      await notificationService.notifyError(
-        error as Error,
-        'Email processing session failed'
-      );
+      if (!this.quietMode) {
+        await notificationService.notifyError(
+          error as Error,
+          'Email processing session failed'
+        );
+      }
       throw error;
     } finally {
       this.isProcessing = false;
@@ -285,12 +295,14 @@ export class MeetingTranscriptAgent {
         extraction.meetingDate
       );
 
-      // Send notification
-      await notificationService.notifyTasksExtracted(
-        email.subject,
-        extraction,
-        obsidianNote.filepath
-      );
+      // Send notification (unless in quiet mode)
+      if (!this.quietMode) {
+        await notificationService.notifyTasksExtracted(
+          email.subject,
+          extraction,
+          obsidianNote.filepath
+        );
+      }
 
       return {
         success: true,

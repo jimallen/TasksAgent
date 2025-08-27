@@ -36,13 +36,15 @@ graph TB
         L[Ribbon Icons]
         M[Command Palette]
         N[Status Bar]
-        O[Dashboard View]
+        O[Dashboard View<br/>with Task Cards]
+        P[Task Edit Controls]
     end
     
     A --> L
     A --> M
     A --> N
     D --> O
+    O --> P
 ```
 
 ## Component Details
@@ -87,9 +89,17 @@ graph TB
   - Interactive task completion
   - Advanced filtering (Today, This Week, My Tasks)
   - Statistics overview
+  - In-line task editing with priority/assignee changes
+  - Toggle between My Tasks and All Tasks views
+- **UI Improvements**:
+  - Edit button positioned in top-left of each task item
+  - Proper flexbox layout for maintainable structure
+  - Theme-aware styling with CSS variables
+  - High contrast metadata tags for better readability
 - **Customization**:
   - Configurable personal task filtering
   - User-specific name prioritization
+  - Support for Obsidian's built-in priority syntax (⏫ ⏬ 🔼 🔽)
 
 ### External Dependencies
 

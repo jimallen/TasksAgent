@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.js",
+    "dev:watch": "node esbuild.config.js --watch",
     "build": "tsc --noEmit && node esbuild.config.js production",
     "build:mcp": "node esbuild.mcp.js production",
     "dev:mcp": "node esbuild.mcp.js",

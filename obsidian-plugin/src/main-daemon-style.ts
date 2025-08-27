@@ -1,6 +1,7 @@
 import { 
   Plugin, 
   Notice, 
+  Modal,
   requestUrl,
   addIcon,
   normalizePath,
@@ -21,17 +22,29 @@ interface MeetingTasksSettings {
   claudeModel: string;
   dashboardShowOnlyMyTasks: boolean;
   dashboardMyName: string;
+  meetingPlatforms: {
+    googleMeet: boolean;
+    zoom: boolean;
+    teams: boolean;
+    genericMeeting: boolean;
+  };
 }
 
 const DEFAULT_SETTINGS: MeetingTasksSettings = {
   lookbackHours: 120,
   debugMode: false,
-  mcpServerUrl: 'http://localhost:3001',
+  mcpServerUrl: 'http://localhost:3000',
   anthropicApiKey: '',
   notesFolder: 'Meetings',
   claudeModel: 'claude-3-5-haiku-20241022',
-  dashboardShowOnlyMyTasks: false,
-  dashboardMyName: ''
+  dashboardShowOnlyMyTasks: true, // Default to showing only user's tasks
+  dashboardMyName: '',
+  meetingPlatforms: {
+    googleMeet: true,
+    zoom: true,
+    teams: false,
+    genericMeeting: true
+  }
 };
 
 /**
@@ -46,6 +59,7 @@ class GmailMcpHttpService {
   }
 
   async connect(): Promise<boolean> {
+    console.log(`[GmailService] Attempting to connect to ${this.serverUrl}`);
     try {
       const response = await requestUrl({
         url: `${this.serverUrl}/health`,
@@ -53,6 +67,7 @@ class GmailMcpHttpService {
       });
       
       this.connected = response.status === 200;
+      console.log(`[GmailService] Connection ${this.connected ? 'successful' : 'failed'}`);
       return this.connected;
     } catch (error) {
       console.error('Failed to connect to MCP server:', error);
@@ -67,6 +82,7 @@ class GmailMcpHttpService {
     }
     
     try {
+      console.log(`[searchEmails] Sending request with query: ${query}`);
       const response = await requestUrl({
         url: `${this.serverUrl}/mcp`,
         method: 'POST',
@@ -83,18 +99,21 @@ class GmailMcpHttpService {
       });
       
       const data = response.json;
+      console.log(`[searchEmails] Response:`, JSON.stringify(data, null, 2));
       
       if (data.error) {
         throw new Error(data.error);
       }
       
       if (data.result && data.result.emails) {
+        console.log(`[searchEmails] Returning ${data.result.emails.length} emails`);
         return data.result.emails;
       }
       
+      console.log(`[searchEmails] No emails in response, returning empty array`);
       return [];
     } catch (error) {
-      console.error('Failed to search emails:', error);
+      console.error('[searchEmails] Failed to search emails:', error);
       throw error;
     }
   }
@@ -169,45 +188,81 @@ class GmailMcpHttpService {
     );
   }
   
-  async fetchRecentMeetingEmails(hoursBack: number): Promise<any[]> {
+  async fetchRecentMeetingEmails(hoursBack: number, platforms?: any): Promise<any[]> {
     // Calculate the date for Gmail query
     const afterDate = new Date();
     afterDate.setTime(afterDate.getTime() - (hoursBack * 60 * 60 * 1000));
     const dateStr = afterDate.toISOString().split('T')[0];
     
-    // Use focused queries for meeting emails
-    const queries = [
-      `from:gemini-notes@google.com after:${dateStr}`,
-      `subject:"Notes:" after:${dateStr}`,
-      `subject:"Recording of" after:${dateStr}`,
-      `subject:"Transcript for" after:${dateStr}`,
-      `subject:meeting after:${dateStr}`,
-      `subject:transcript after:${dateStr}`,
-      `subject:"meeting notes" after:${dateStr}`,
-      `subject:"action items" after:${dateStr}`,
-      `from:noreply@zoom.us after:${dateStr}`,
-      `from:meet@google.com after:${dateStr}`
-    ];
+    console.log(`[Gmail Search] Looking for emails after ${dateStr} (${hoursBack} hours back)`);
+    console.log(`[Gmail Search] Platforms:`, platforms);
+    
+    // Use focused queries for meeting emails based on selected platforms
+    const queries = [];
+    
+    // Google Meet queries
+    if (!platforms || platforms.googleMeet) {
+      queries.push(
+        `from:gemini-notes@google.com after:${dateStr}`,
+        `from:meet@google.com after:${dateStr}`,
+        `subject:"Notes:" after:${dateStr}`
+      );
+    }
+    
+    // Zoom queries
+    if (!platforms || platforms.zoom) {
+      queries.push(
+        `from:noreply@zoom.us after:${dateStr}`,
+        `subject:"Recording of" after:${dateStr}`
+      );
+    }
+    
+    // Teams queries
+    if (platforms && platforms.teams) {
+      queries.push(
+        `from:noreply@microsoft.com subject:teams after:${dateStr}`
+      );
+    }
+    
+    // Generic meeting queries
+    if (!platforms || platforms.genericMeeting) {
+      queries.push(
+        `subject:"Transcript for" after:${dateStr}`,
+        `subject:meeting after:${dateStr}`,
+        `subject:transcript after:${dateStr}`,
+        `subject:"meeting notes" after:${dateStr}`,
+        `subject:"action items" after:${dateStr}`
+      );
+    }
     
     const allEmails: any[] = [];
     const seenIds = new Set<string>();
     
     for (const query of queries) {
       try {
+        console.log(`[Gmail Search] Searching: ${query}`);
         const emails = await this.searchEmails(query, 10);
+        console.log(`[Gmail Search] Found ${emails.length} emails for query: ${query}`);
         
         for (const email of emails) {
+          console.log(`[Gmail Search] Checking email: ${email.subject} from ${email.from}`);
           // Additional filtering
           if (!seenIds.has(email.id) && this.isMeetingEmail(email)) {
+            console.log(`[Gmail Search] ✓ Added email: ${email.subject}`);
             seenIds.add(email.id);
             allEmails.push(email);
+          } else if (seenIds.has(email.id)) {
+            console.log(`[Gmail Search] ✗ Duplicate email: ${email.subject}`);
+          } else {
+            console.log(`[Gmail Search] ✗ Not a meeting email: ${email.subject}`);
           }
         }
       } catch (error) {
-        console.error(`Failed to search: ${query}`, error);
+        console.error(`[Gmail Search] Failed to search: ${query}`, error);
       }
     }
     
+    console.log(`[Gmail Search] Total emails found: ${allEmails.length}`);
     return allEmails;
   }
 
@@ -231,7 +286,10 @@ export default class MeetingTasksPlugin extends Plugin {
   processedEmails: Set<string> = new Set();
   
   async onload() {
+    console.log('===============================================');
     console.log('Loading Meeting Tasks Plugin (Daemon-Style)...');
+    console.log('Plugin version: 1.0.0');
+    console.log('===============================================');
     
     // Load all data
     const data = await this.loadData();
@@ -272,6 +330,14 @@ export default class MeetingTasksPlugin extends Plugin {
       }
     });
     
+    this.addCommand({
+      id: 'reset-processed-emails',
+      name: 'Reset processed emails',
+      callback: async () => {
+        await this.resetProcessedEmails();
+      }
+    });
+    
     // Register the task dashboard view
     this.registerView(
       TASK_DASHBOARD_VIEW_TYPE,
@@ -281,6 +347,11 @@ export default class MeetingTasksPlugin extends Plugin {
     // Add dashboard ribbon icon
     this.addRibbonIcon('layout-dashboard', 'Open task dashboard', () => {
       this.openTaskDashboard();
+    });
+    
+    // Add reset ribbon icon
+    this.addRibbonIcon('refresh-cw', 'Reset processed emails', async () => {
+      await this.resetProcessedEmails();
     });
     
     // Initialize services
@@ -317,23 +388,64 @@ export default class MeetingTasksPlugin extends Plugin {
   }
   
   async processEmails() {
-    // Ensure Gmail is connected
-    if (!this.gmailService || !this.gmailService.isConnected()) {
-      new Notice('Gmail not connected. Reconnecting...');
-      await this.initializeServices();
-      
-      if (!this.gmailService || !this.gmailService.isConnected()) {
-        new Notice('Failed to connect to Gmail MCP');
-        return;
-      }
-    }
+    console.log('[processEmails] Function called - Starting email processing');
+    console.log('[processEmails] Settings:', {
+      lookbackHours: this.settings.lookbackHours,
+      mcpServerUrl: this.settings.mcpServerUrl,
+      hasApiKey: !!this.settings.anthropicApiKey,
+      processedEmailsCount: this.processedEmails.size
+    });
     
     try {
       this.updateStatus('Processing...');
+      new Notice('Triggering email processing...');
+      
+      // Try to trigger the daemon via HTTP with quiet mode
+      const daemonUrl = 'http://localhost:3002/trigger';
+      try {
+        const response = await requestUrl({
+          url: daemonUrl,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            source: 'obsidian-plugin',
+            quiet: true,  // Use quiet mode to suppress notifications
+            lookbackHours: this.settings.lookbackHours,  // Pass the plugin's lookback setting
+            meetingPlatforms: this.settings.meetingPlatforms  // Pass platform preferences
+          })
+        });
+        
+        if (response.status === 200) {
+          const result = response.json;
+          new Notice(`✅ Processed: ${result.emailsProcessed || 0} emails, ${result.tasksExtracted || 0} tasks extracted`);
+          this.updateStatus('Processing complete');
+          return;
+        }
+      } catch (daemonError) {
+        console.log('Daemon not available, falling back to direct processing');
+      }
+      
+      // Fallback to direct processing if daemon is not available
+      // Ensure Gmail is connected
+      if (!this.gmailService || !this.gmailService.isConnected()) {
+        new Notice('Gmail not connected. Reconnecting...');
+        await this.initializeServices();
+        
+        if (!this.gmailService || !this.gmailService.isConnected()) {
+          new Notice('Failed to connect to Gmail MCP');
+          return;
+        }
+      }
+      
       new Notice('Searching for meeting emails...');
       
-      // Fetch recent meeting emails
-      const emails = await this.gmailService.fetchRecentMeetingEmails(this.settings.lookbackHours);
+      // Fetch recent meeting emails with platform preferences
+      const emails = await this.gmailService.fetchRecentMeetingEmails(
+        this.settings.lookbackHours,
+        this.settings.meetingPlatforms
+      );
       
       if (emails.length === 0) {
         this.updateStatus('No new emails');
@@ -691,6 +803,70 @@ created: ${new Date().toISOString()}
     });
   }
   
+  async resetProcessedEmails() {
+    console.log('Reset function called');
+    try {
+      this.updateStatus('Resetting...');
+      
+      // Simple confirmation using Obsidian's built-in confirm
+      const confirmed = confirm('Reset Processed Emails?\n\nThis will clear all processed email records, allowing them to be processed again.');
+      
+      if (!confirmed) {
+        console.log('User cancelled reset');
+        this.updateStatus('Ready');
+        return;
+      }
+      
+      console.log('User confirmed reset');
+      new Notice('Resetting processed emails...');
+      
+      // Try to reset via daemon HTTP endpoint
+      const daemonUrl = 'http://localhost:3002/reset';
+      try {
+        console.log('Calling daemon reset endpoint...');
+        const response = await requestUrl({
+          url: daemonUrl,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            type: 'all'  // Reset both emails and stats
+          })
+        });
+        
+        console.log('Daemon response:', response.status, response.json);
+        
+        if (response.status === 200) {
+          const result = response.json;
+          new Notice(`✅ Reset complete: ${result.details?.emailsDeleted || 0} emails cleared`);
+          
+          // Also clear local cache
+          this.processedEmails.clear();
+          await this.saveSettings();
+          
+          this.updateStatus('Ready');
+          return;
+        }
+      } catch (daemonError) {
+        console.error('Daemon reset error:', daemonError);
+        console.log('Daemon not available, clearing local cache only');
+      }
+      
+      // Fallback: clear local cache only
+      this.processedEmails.clear();
+      await this.saveSettings();
+      
+      new Notice('✅ Local cache cleared. Emails can be processed again.');
+      this.updateStatus('Ready');
+      
+    } catch (error: any) {
+      console.error('Reset failed:', error);
+      new Notice(`Reset failed: ${error.message}`);
+      this.updateStatus('Error');
+    }
+  }
+  
   onunload() {
     console.log('Unloading Meeting Tasks Plugin...');
     
@@ -722,7 +898,7 @@ class MeetingTasksSettingTab extends PluginSettingTab {
       .setName('MCP Server URL')
       .setDesc('URL of the Gmail MCP HTTP server')
       .addText(text => text
-        .setPlaceholder('http://localhost:3001')
+        .setPlaceholder('http://localhost:3000')
         .setValue(this.plugin.settings.mcpServerUrl)
         .onChange(async (value) => {
           this.plugin.settings.mcpServerUrl = value;
@@ -741,6 +917,62 @@ class MeetingTasksSettingTab extends PluginSettingTab {
             this.plugin.settings.lookbackHours = hours;
             await this.plugin.saveSettings();
           }
+        }));
+    
+    // Meeting Platforms
+    containerEl.createEl('h3', {text: 'Meeting Platforms'});
+    containerEl.createEl('p', {text: 'Select which meeting platforms to search for', cls: 'setting-item-description'});
+    
+    new Setting(containerEl)
+      .setName('Google Meet')
+      .setDesc('Search for Google Meet recordings and Gemini notes')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.meetingPlatforms?.googleMeet ?? true)
+        .onChange(async (value) => {
+          if (!this.plugin.settings.meetingPlatforms) {
+            this.plugin.settings.meetingPlatforms = DEFAULT_SETTINGS.meetingPlatforms;
+          }
+          this.plugin.settings.meetingPlatforms.googleMeet = value;
+          await this.plugin.saveSettings();
+        }));
+    
+    new Setting(containerEl)
+      .setName('Zoom')
+      .setDesc('Search for Zoom recordings and transcripts')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.meetingPlatforms?.zoom ?? true)
+        .onChange(async (value) => {
+          if (!this.plugin.settings.meetingPlatforms) {
+            this.plugin.settings.meetingPlatforms = DEFAULT_SETTINGS.meetingPlatforms;
+          }
+          this.plugin.settings.meetingPlatforms.zoom = value;
+          await this.plugin.saveSettings();
+        }));
+    
+    new Setting(containerEl)
+      .setName('Microsoft Teams')
+      .setDesc('Search for Teams meeting recordings')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.meetingPlatforms?.teams ?? false)
+        .onChange(async (value) => {
+          if (!this.plugin.settings.meetingPlatforms) {
+            this.plugin.settings.meetingPlatforms = DEFAULT_SETTINGS.meetingPlatforms;
+          }
+          this.plugin.settings.meetingPlatforms.teams = value;
+          await this.plugin.saveSettings();
+        }));
+    
+    new Setting(containerEl)
+      .setName('Generic Meeting Emails')
+      .setDesc('Search for general meeting/transcript keywords')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.meetingPlatforms?.genericMeeting ?? true)
+        .onChange(async (value) => {
+          if (!this.plugin.settings.meetingPlatforms) {
+            this.plugin.settings.meetingPlatforms = DEFAULT_SETTINGS.meetingPlatforms;
+          }
+          this.plugin.settings.meetingPlatforms.genericMeeting = value;
+          await this.plugin.saveSettings();
         }));
     
     // Claude settings

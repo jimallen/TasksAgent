@@ -277,8 +277,9 @@ export class ObsidianService {
         const assignee = task.assignee !== 'me' ? ` @[[${task.assignee}]]` : '';
         const due = task.dueDate ? ` 📅 ${this.formatDueDate(task.dueDate)}` : '';
         const confidence = task.confidence < 70 ? ' ❓' : '';
+        const categoryTag = task.category && task.category !== 'other' ? ` #${task.category}` : '';
         
-        sections.push(`${checkbox} ${priority} ${task.description}${assignee}${due}${confidence}`);
+        sections.push(`${checkbox} ${priority} ${task.description}${assignee}${due}${confidence}${categoryTag}`);
         
         if (task.context) {
           sections.push(`  - Context: ${task.context}`);

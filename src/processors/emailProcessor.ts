@@ -11,7 +11,7 @@ export interface ProcessingResult {
 export class EmailProcessor {
   private agent: MeetingTranscriptAgent | null = null;
 
-  async processEmails(): Promise<ProcessingResult> {
+  async processEmails(quiet = false, lookbackHours?: number): Promise<ProcessingResult> {
     const result: ProcessingResult = {
       emailsProcessed: 0,
       tasksExtracted: 0,
@@ -22,10 +22,10 @@ export class EmailProcessor {
     try {
       if (!this.agent) {
         this.agent = new MeetingTranscriptAgent();
-        await this.agent.initialize();
+        await this.agent.initialize(quiet);
       }
 
-      const processResult = await this.agent.processEmails();
+      const processResult = await this.agent.processEmails(quiet, lookbackHours);
       
       result.emailsProcessed = processResult.processed;
       result.tasksExtracted = processResult.tasksExtracted;

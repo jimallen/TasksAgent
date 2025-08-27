@@ -15,6 +15,7 @@ if (command !== '--headless' && command !== '-h' && command !== '--help') {
 
 // Import after environment is configured
 import { DaemonService } from './daemon/service';
+import { DaemonHttpServer } from './daemon/httpServer';
 import { TUIInterface } from './tui/interface';
 import logger from './utils/logger';
 import { patchConsole } from './utils/consolePatch';
@@ -23,6 +24,10 @@ async function startDaemon() {
   logger.info('Starting Meeting Transcript Agent Daemon...');
   
   const service = new DaemonService();
+  const httpServer = new DaemonHttpServer(service, 3002);
+  
+  // Start HTTP server for external triggers
+  await httpServer.start();
   
   if (command === '--headless' || command === '-h') {
     logger.info('Running in headless mode');

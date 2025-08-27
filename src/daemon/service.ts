@@ -1,4 +1,3 @@
-import * as cron from 'node-cron';
 import { EventEmitter } from 'events';
 import { EmailProcessor } from '../processors/emailProcessor';
 import logger from '../utils/logger';
@@ -21,7 +20,6 @@ export interface ServiceStats {
 
 export class DaemonService extends EventEmitter {
   private processor: EmailProcessor;
-  private cronJobs: cron.ScheduledTask[] = [];
   private stats: ServiceStats;
   private db: Database.Database;
   private isProcessing = false;
@@ -129,23 +127,13 @@ export class DaemonService extends EventEmitter {
       return;
     }
 
-    logger.info('Starting daemon service...');
+    logger.info('Starting daemon service (manual trigger only - no scheduled processing)...');
     this.stats.status = 'running';
     this.stopRequested = false;
     this.emit('statusChanged', this.stats.status);
 
-    const schedule = process.env['SCHEDULE'] || '0 9,13,17 * * *';
-    
-    const job = cron.schedule(schedule, async () => {
-      await this.processEmails();
-    });
-    
-    this.cronJobs.push(job);
-    
-    const nextRuns = this.getNextScheduledRuns();
-    this.stats.nextScheduledRun = nextRuns[0] || null;
-    
-    logger.info(`Daemon service started with schedule: ${schedule}`);
+    // No scheduled processing - only manual triggers via HTTP
+    logger.info('Daemon service started - waiting for manual triggers via HTTP');
     this.emit('started');
   }
 
@@ -153,10 +141,7 @@ export class DaemonService extends EventEmitter {
     logger.info('Stopping daemon service...');
     this.stopRequested = true;
     
-    for (const job of this.cronJobs) {
-      job.stop();
-    }
-    this.cronJobs = [];
+    // No cron jobs to stop since we're manual-only
     
     if (this.isProcessing) {
       logger.info('Waiting for current processing to complete...');
@@ -178,7 +163,7 @@ export class DaemonService extends EventEmitter {
     logger.info('Daemon service stopped');
   }
 
-  async processEmails(isManual = false): Promise<void> {
+  async processEmails(isManual = false, quiet = false, lookbackHours?: number): Promise<{ emailsProcessed: number; tasksExtracted: number; notesCreated: number } | void> {
     if (this.isProcessing) {
       logger.warn('Already processing emails, skipping this run');
       return;
@@ -191,9 +176,10 @@ export class DaemonService extends EventEmitter {
     this.emit('processingStarted');
 
     try {
-      logger.info(`Starting ${isManual ? 'manual' : 'scheduled'} email processing...`);
+      logger.info(`Starting ${isManual ? 'manual' : 'scheduled'} email processing...${quiet ? ' (quiet mode)' : ''}${lookbackHours ? ` (${lookbackHours} hours lookback)` : ''}`);
       
-      const result = await this.processor.processEmails();
+      // Pass quiet mode and optional lookback hours to processor
+      const result = await this.processor.processEmails(quiet, lookbackHours);
       
       if (this.stopRequested) {
         logger.info('Stop requested, aborting processing');
@@ -209,6 +195,9 @@ export class DaemonService extends EventEmitter {
       logger.info(`Processing completed: ${result.emailsProcessed} emails, ${result.tasksExtracted} tasks, ${result.notesCreated} notes`);
       
       this.emit('processingCompleted', result);
+      
+      // Return the result for API responses
+      return result;
     } catch (error) {
       this.stats.failedRuns++;
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -216,12 +205,13 @@ export class DaemonService extends EventEmitter {
       this.logError(errorMessage);
       this.stats.status = 'error';
       this.emit('processingFailed', error);
+      throw error; // Re-throw for HTTP endpoint to handle
     } finally {
       this.isProcessing = false;
       if (!this.stopRequested) {
         this.stats.status = 'running';
-        const nextRuns = this.getNextScheduledRuns();
-        this.stats.nextScheduledRun = nextRuns[0] || null;
+        // No scheduled runs in manual-only mode
+        this.stats.nextScheduledRun = null;
       }
       this.saveStats();
       this.emit('statusChanged', this.stats.status);
@@ -233,40 +223,8 @@ export class DaemonService extends EventEmitter {
   }
 
   getNextScheduledRuns(): Date[] {
-    const runs: Date[] = [];
-    const now = new Date();
-    const schedule = process.env['SCHEDULE'] || '0 9,13,17 * * *';
-    
-    const parts = schedule.split(' ');
-    const minute = parts[0];
-    const hours = parts[1] || '9,13,17';
-    const hoursList = hours.split(',').map(h => parseInt(h));
-    
-    for (let i = 0; i < 3; i++) {
-      const nextRun = new Date(now);
-      nextRun.setSeconds(0);
-      nextRun.setMilliseconds(0);
-      
-      let found = false;
-      for (let dayOffset = 0; dayOffset <= 1; dayOffset++) {
-        const testDate = new Date(nextRun);
-        testDate.setDate(testDate.getDate() + dayOffset);
-        
-        for (const hour of hoursList) {
-          testDate.setHours(hour);
-          testDate.setMinutes(parseInt(minute || '0'));
-          
-          if (testDate > now && !runs.some(r => r.getTime() === testDate.getTime())) {
-            runs.push(new Date(testDate));
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
-      }
-    }
-    
-    return runs.sort((a, b) => a.getTime() - b.getTime());
+    // No scheduled runs in manual-only mode
+    return [];
   }
 
   clearStats(): void {
@@ -284,6 +242,53 @@ export class DaemonService extends EventEmitter {
     this.saveStats();
     this.db.prepare('DELETE FROM service_errors').run();
     this.emit('statsCleared');
+  }
+
+  async resetProcessedData(type: string = 'all'): Promise<{ message: string; emailsDeleted?: number; statsCleared?: boolean }> {
+    const result: { message: string; emailsDeleted?: number; statsCleared?: boolean } = {
+      message: ''
+    };
+
+    try {
+      // Reset processed emails from state database
+      if (type === 'all' || type === 'emails') {
+        // We need to access the state database to clear processed emails
+        const stateDbPath = path.join(process.cwd(), 'data', 'state.db');
+        const stateDb = new Database(stateDbPath);
+        
+        // Delete all processed emails
+        const deleteResult = stateDb.prepare('DELETE FROM processed_emails').run();
+        result.emailsDeleted = deleteResult.changes;
+        
+        // Also delete related data
+        stateDb.prepare('DELETE FROM extracted_tasks').run();
+        stateDb.prepare('DELETE FROM meetings').run();
+        stateDb.prepare('DELETE FROM attachments').run();
+        
+        stateDb.close();
+        
+        logger.info(`Reset processed emails: ${result.emailsDeleted} records deleted`);
+      }
+
+      // Reset stats
+      if (type === 'all' || type === 'stats') {
+        this.clearStats();
+        result.statsCleared = true;
+        logger.info('Reset daemon statistics');
+      }
+
+      result.message = type === 'all' 
+        ? `Reset complete: ${result.emailsDeleted || 0} emails deleted, stats cleared`
+        : type === 'emails'
+        ? `Reset complete: ${result.emailsDeleted || 0} emails deleted`
+        : 'Stats cleared';
+
+      this.emit('dataReset', result);
+      return result;
+    } catch (error) {
+      logger.error('Error resetting data:', error);
+      throw error;
+    }
   }
 
   cleanup(): void {
