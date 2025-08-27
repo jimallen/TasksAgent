@@ -15,6 +15,7 @@ export class DaemonHttpServer {
   private server: any;
   private running: boolean = false;
   private connections: Set<any> = new Set();
+  private startupTime: Date | null = null;
 
   constructor(daemonService: DaemonService, port = 3000) {
     this.daemonService = daemonService;
@@ -33,10 +34,19 @@ export class DaemonHttpServer {
     // Health check
     this.app.get('/health', (_req, res) => {
       const stats = this.daemonService.getStats();
+      const httpUptime = this.startupTime ? 
+        Math.floor((Date.now() - this.startupTime.getTime()) / 1000) : 0;
+      
       res.json({
         status: 'ok',
         daemon: stats.status,
         uptime: process.uptime(),
+        httpServer: {
+          running: this.isRunning(),
+          port: this.port,
+          startupTime: this.startupTime,
+          uptime: httpUptime
+        },
         stats: {
           totalRuns: stats.totalRuns,
           emailsProcessed: stats.emailsProcessed,
@@ -133,6 +143,8 @@ export class DaemonHttpServer {
     return new Promise((resolve, reject) => {
       this.server = this.app.listen(this.port, () => {
         this.running = true;
+        this.startupTime = new Date();
+        logger.info(`[HTTP Server] Starting on port ${this.port}...`);
         
         // Track connections for graceful shutdown
         this.server.on('connection', (connection: any) => {
@@ -142,7 +154,7 @@ export class DaemonHttpServer {
           });
         });
         
-        logger.info(`Daemon HTTP server running on http://localhost:${this.port}`);
+        logger.info(`[HTTP Server] Started successfully on http://localhost:${this.port}`);
         logger.info('Available endpoints:');
         logger.info('  GET  /health - Health check');
         logger.info('  POST /trigger - Trigger email processing');
@@ -178,19 +190,23 @@ export class DaemonHttpServer {
 
   async stop(): Promise<void> {
     if (this.server) {
+      logger.info(`[HTTP Server] Stopping server on port ${this.port}...`);
       return new Promise((resolve) => {
         // Set a timeout to force close after 5 seconds
         const forceCloseTimeout = setTimeout(() => {
-          logger.warn('Force closing HTTP server after 5 second timeout');
+          logger.warn('[HTTP Server] Force closing after 5 second timeout');
           for (const connection of this.connections) {
             connection.destroy();
           }
           this.connections.clear();
           this.running = false;
+          this.startupTime = null;
+          logger.info('[HTTP Server] Stopped (forced)');
           resolve();
         }, 5000);
         
         // Close all tracked connections
+        logger.info(`[HTTP Server] Closing ${this.connections.size} active connection(s)...`);
         for (const connection of this.connections) {
           connection.destroy();
         }
@@ -199,7 +215,8 @@ export class DaemonHttpServer {
         this.server.close(() => {
           clearTimeout(forceCloseTimeout);
           this.running = false;
-          logger.info('Daemon HTTP server stopped gracefully');
+          this.startupTime = null;
+          logger.info('[HTTP Server] Stopped gracefully');
           resolve();
         });
       });
