@@ -76,7 +76,16 @@ export class DaemonService extends EventEmitter {
   }
 
   private loadStats(): void {
-    const row = this.db.prepare('SELECT * FROM service_stats WHERE id = 1').get() as any;
+    const row = this.db.prepare('SELECT * FROM service_stats WHERE id = 1').get() as {
+      start_time: string;
+      last_run: string | null;
+      total_runs: number;
+      successful_runs: number;
+      failed_runs: number;
+      emails_processed: number;
+      tasks_extracted: number;
+      notes_created: number;
+    } | undefined;
     if (row) {
       this.stats = {
         ...this.stats,
@@ -90,7 +99,10 @@ export class DaemonService extends EventEmitter {
         notesCreated: row.notes_created,
       };
       
-      const errors = this.db.prepare('SELECT * FROM service_errors ORDER BY timestamp DESC LIMIT 10').all() as any[];
+      const errors = this.db.prepare('SELECT * FROM service_errors ORDER BY timestamp DESC LIMIT 10').all() as Array<{
+        timestamp: string;
+        error: string;
+      }>;
       this.stats.errors = errors.map(e => `${e.timestamp}: ${e.error}`);
     }
   }
@@ -281,7 +293,7 @@ export class DaemonService extends EventEmitter {
       if (type === 'all' || type === 'emails') {
         // We need to access the state database to clear processed emails
         const stateDbPath = path.join(process.cwd(), 'data', 'state.db');
-        const stateDb = new Database(stateDbPath);
+        const stateDb: Database.Database = new Database(stateDbPath);
         
         // Delete all processed emails
         const deleteResult = stateDb.prepare('DELETE FROM processed_emails').run();

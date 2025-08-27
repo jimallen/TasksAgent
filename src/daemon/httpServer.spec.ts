@@ -36,7 +36,7 @@ describe('DaemonHttpServer', () => {
       resetProcessedData: jest.fn().mockResolvedValue({
         message: 'Reset complete',
       }),
-    } as any;
+    } as unknown as jest.Mocked<DaemonService>;
 
     // Mock Express app
     mockExpressApp = {
@@ -54,7 +54,7 @@ describe('DaemonHttpServer', () => {
     };
 
     // Mock express
-    (express as any).mockReturnValue(mockExpressApp);
+    (express as unknown as jest.Mock).mockReturnValue(mockExpressApp);
 
     mockExpressApp.listen.mockImplementation((_port: number, callback: Function) => {
       callback();
@@ -214,7 +214,7 @@ describe('DaemonHttpServer', () => {
         close: jest.fn(),
       };
 
-      jest.spyOn(net, 'createServer').mockReturnValue(mockTester as any);
+      jest.spyOn(net, 'createServer').mockReturnValue(mockTester as unknown as net.Server);
 
       // Simulate port in use
       mockTester.once.mockImplementation((event: string, handler: Function) => {
@@ -239,7 +239,7 @@ describe('DaemonHttpServer', () => {
         close: jest.fn(),
       };
 
-      jest.spyOn(net, 'createServer').mockReturnValue(mockTester as any);
+      jest.spyOn(net, 'createServer').mockReturnValue(mockTester as unknown as net.Server);
 
       let portCheckCount = 0;
       mockTester.listen.mockImplementation((_port: number) => {
@@ -285,7 +285,7 @@ describe('DaemonHttpServer', () => {
         close: jest.fn(),
       };
 
-      jest.spyOn(net, 'createServer').mockReturnValue(mockTester as any);
+      jest.spyOn(net, 'createServer').mockReturnValue(mockTester as unknown as net.Server);
       
       mockTester.once.mockImplementation((event: string, handler: Function) => {
         if (event === 'listening') {
@@ -318,7 +318,7 @@ describe('DaemonHttpServer', () => {
         close: jest.fn(),
       };
 
-      jest.spyOn(net, 'createServer').mockReturnValue(mockTester as any);
+      jest.spyOn(net, 'createServer').mockReturnValue(mockTester as unknown as net.Server);
       
       mockTester.once.mockImplementation((event: string, handler: Function) => {
         if (event === 'listening') {
@@ -346,7 +346,7 @@ describe('DaemonHttpServer', () => {
         close: jest.fn(),
       };
 
-      jest.spyOn(net, 'createServer').mockReturnValue(mockTester as any);
+      jest.spyOn(net, 'createServer').mockReturnValue(mockTester as unknown as net.Server);
 
       // All ports are in use
       mockTester.once.mockImplementation((event: string, handler: Function) => {
@@ -367,14 +367,14 @@ describe('DaemonHttpServer', () => {
   describe('Status Tracking', () => {
     it('should track startup time', async () => {
       const startTime = new Date();
-      jest.spyOn(global, 'Date').mockImplementation(() => startTime as any);
+      jest.spyOn(global, 'Date').mockImplementation(() => startTime as unknown as string);
 
       await httpServer.start();
 
       // Check that server is running with startup time set
       expect(httpServer.isRunning()).toBe(true);
 
-      (global.Date as any).mockRestore();
+      (global.Date as unknown as jest.SpyInstance).mockRestore();
     });
 
     it('should clear startup time on stop', async () => {
@@ -400,7 +400,7 @@ describe('DaemonHttpServer', () => {
       
       mockServerInstance.on.mockImplementation((event: string, handler: Function) => {
         if (event === 'error') {
-          errorHandler.mockImplementation(handler as any);
+          errorHandler.mockImplementation(handler as (...args: unknown[]) => unknown);
         }
         return mockServerInstance;
       });
@@ -425,7 +425,7 @@ describe('DaemonHttpServer', () => {
       
       mockServerInstance.on.mockImplementation((event: string, handler: Function) => {
         if (event === 'error') {
-          errorHandler.mockImplementation(handler as any);
+          errorHandler.mockImplementation(handler as (...args: unknown[]) => unknown);
         }
         return mockServerInstance;
       });

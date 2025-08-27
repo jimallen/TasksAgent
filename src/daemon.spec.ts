@@ -29,14 +29,14 @@ describe('Daemon Lifecycle Management', () => {
       processEmails: jest.fn().mockResolvedValue({}),
       on: jest.fn(),
       emit: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<DaemonService>;
 
     mockHttpServer = {
       start: jest.fn().mockResolvedValue(undefined),
       stop: jest.fn().mockResolvedValue(undefined),
       isRunning: jest.fn().mockReturnValue(true),
       getPort: jest.fn().mockReturnValue(3002),
-    } as any;
+    } as unknown as jest.Mocked<DaemonHttpServer>;
 
     // Mock constructors
     (DaemonService as unknown as jest.Mock).mockImplementation(() => mockService);

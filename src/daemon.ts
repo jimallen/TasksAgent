@@ -26,14 +26,15 @@ let httpServer: DaemonHttpServer | null = null;
 async function startDaemon() {
   logger.info('Starting Meeting Transcript Agent Daemon...');
   
-  // Create HTTP server first
-  const tempHttpServer = new DaemonHttpServer(null as any, 3002);
+  // Create HTTP server first (will update with service reference later)
+  const tempHttpServer = new DaemonHttpServer(null!, 3002);
   
   // Create service with HTTP server reference
   const service = new DaemonService(tempHttpServer);
   
   // Now update the HTTP server with the service reference
-  (tempHttpServer as any).daemonService = service;
+  // This is a necessary workaround for circular dependency
+  (tempHttpServer as unknown as { daemonService: DaemonService }).daemonService = service;
   httpServer = tempHttpServer;
   
   // Start HTTP server for external triggers

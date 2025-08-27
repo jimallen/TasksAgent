@@ -37,7 +37,7 @@ describe('DaemonService', () => {
         tasksExtracted: 10,
         notesCreated: 3,
       }),
-    } as any;
+    } as unknown as jest.Mocked<EmailProcessor>;
     (EmailProcessor as jest.Mock).mockReturnValue(mockProcessor);
 
     // Mock HTTP server
@@ -46,7 +46,7 @@ describe('DaemonService', () => {
       stop: jest.fn().mockResolvedValue(undefined),
       isRunning: jest.fn().mockReturnValue(true),
       getPort: jest.fn().mockReturnValue(3002),
-    } as any;
+    } as unknown as jest.Mocked<DaemonHttpServer>;
     (DaemonHttpServer as jest.Mock).mockImplementation(() => mockHttpServer);
   });
 
