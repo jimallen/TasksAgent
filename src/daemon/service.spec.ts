@@ -1,5 +1,6 @@
 import { DaemonService } from './service';
 import { DaemonHttpServer } from './httpServer';
+import { GmailMcpService } from './gmailMcpService';
 import { EmailProcessor } from '../processors/emailProcessor';
 import logger from '../utils/logger';
 import Database from 'better-sqlite3';
@@ -8,10 +9,12 @@ jest.mock('../processors/emailProcessor');
 jest.mock('../utils/logger');
 jest.mock('better-sqlite3');
 jest.mock('./httpServer');
+jest.mock('./gmailMcpService');
 
 describe('DaemonService', () => {
   let service: DaemonService;
   let mockHttpServer: jest.Mocked<DaemonHttpServer>;
+  let mockGmailMcp: jest.Mocked<GmailMcpService>;
   let mockProcessor: jest.Mocked<EmailProcessor>;
   let mockDb: any;
 
@@ -48,14 +51,41 @@ describe('DaemonService', () => {
       getPort: jest.fn().mockReturnValue(3002),
     } as unknown as jest.Mocked<DaemonHttpServer>;
     (DaemonHttpServer as jest.Mock).mockImplementation(() => mockHttpServer);
+
+    // Mock Gmail MCP service
+    mockGmailMcp = {
+      start: jest.fn().mockResolvedValue(undefined),
+      stop: jest.fn().mockResolvedValue(undefined),
+      isRunning: jest.fn().mockReturnValue(true),
+      getStatus: jest.fn().mockReturnValue({
+        running: true,
+        pid: 12345,
+        requestCount: 0,
+        restartCount: 0,
+        lastError: null,
+      }),
+      sendRequest: jest.fn(),
+      on: jest.fn(),
+    } as unknown as jest.Mocked<GmailMcpService>;
+    (GmailMcpService as jest.Mock).mockImplementation(() => mockGmailMcp);
   });
 
-  describe('Cleanup with HTTP Server', () => {
+  describe('Cleanup with HTTP Server and Gmail MCP', () => {
     it('should stop HTTP server during cleanup if provided', async () => {
       service = new DaemonService(mockHttpServer);
       
       await service.cleanup();
 
+      expect(mockHttpServer.stop).toHaveBeenCalled();
+      expect(mockDb.close).toHaveBeenCalled();
+    });
+
+    it('should stop Gmail MCP service during cleanup if provided', async () => {
+      service = new DaemonService(mockHttpServer, mockGmailMcp);
+      
+      await service.cleanup();
+
+      expect(mockGmailMcp.stop).toHaveBeenCalled();
       expect(mockHttpServer.stop).toHaveBeenCalled();
       expect(mockDb.close).toHaveBeenCalled();
     });
@@ -67,6 +97,18 @@ describe('DaemonService', () => {
       // Should not throw even if HTTP server stop fails
       await expect(service.cleanup()).resolves.not.toThrow();
       
+      expect(mockHttpServer.stop).toHaveBeenCalled();
+      expect(mockDb.close).toHaveBeenCalled();
+    });
+
+    it('should handle Gmail MCP stop failure during cleanup', async () => {
+      mockGmailMcp.stop.mockRejectedValue(new Error('Gmail MCP stop failed'));
+      service = new DaemonService(mockHttpServer, mockGmailMcp);
+      
+      // Should not throw even if Gmail MCP stop fails
+      await expect(service.cleanup()).resolves.not.toThrow();
+      
+      expect(mockGmailMcp.stop).toHaveBeenCalled();
       expect(mockHttpServer.stop).toHaveBeenCalled();
       expect(mockDb.close).toHaveBeenCalled();
     });
@@ -88,9 +130,38 @@ describe('DaemonService', () => {
 
       expect(mockDb.close).toHaveBeenCalled();
     });
+
+    it('should close database even if Gmail MCP stop fails', async () => {
+      mockGmailMcp.stop.mockRejectedValue(new Error('Gmail MCP stop error'));
+      service = new DaemonService(mockHttpServer, mockGmailMcp);
+      
+      await service.cleanup();
+
+      expect(mockDb.close).toHaveBeenCalled();
+    });
+
+    it('should stop services in correct order during cleanup', async () => {
+      const stopOrder: string[] = [];
+      
+      mockGmailMcp.stop.mockImplementation(async () => {
+        stopOrder.push('gmail');
+      });
+      
+      mockHttpServer.stop.mockImplementation(async () => {
+        stopOrder.push('http');
+      });
+      
+      service = new DaemonService(mockHttpServer, mockGmailMcp);
+      
+      await service.cleanup();
+
+      // Gmail MCP should stop first, then HTTP server
+      expect(stopOrder).toEqual(['gmail', 'http']);
+      expect(mockDb.close).toHaveBeenCalled();
+    });
   });
 
-  describe('Stats with HTTP Server', () => {
+  describe('Stats with HTTP Server and Gmail MCP', () => {
     it('should include HTTP server status in stats when server is provided', () => {
       service = new DaemonService(mockHttpServer);
       
@@ -102,6 +173,22 @@ describe('DaemonService', () => {
       expect(mockHttpServer.getPort).toHaveBeenCalled();
     });
 
+    it('should include Gmail MCP status in stats when service is provided', () => {
+      service = new DaemonService(mockHttpServer, mockGmailMcp);
+      
+      const stats = service.getStats();
+
+      expect(stats.gmailMcpRunning).toBe(true);
+      expect(stats.gmailMcpStatus).toEqual({
+        running: true,
+        pid: 12345,
+        requestCount: 0,
+        restartCount: 0,
+        lastError: null,
+      });
+      expect(mockGmailMcp.getStatus).toHaveBeenCalled();
+    });
+
     it('should not include HTTP server status when server is not provided', () => {
       service = new DaemonService();
       
@@ -109,6 +196,15 @@ describe('DaemonService', () => {
 
       expect(stats.httpServerRunning).toBeUndefined();
       expect(stats.httpServerPort).toBeUndefined();
+    });
+
+    it('should not include Gmail MCP status when service is not provided', () => {
+      service = new DaemonService(mockHttpServer);
+      
+      const stats = service.getStats();
+
+      expect(stats.gmailMcpRunning).toBeUndefined();
+      expect(stats.gmailMcpStatus).toBeUndefined();
     });
 
     it('should reflect HTTP server stopped state', () => {
@@ -119,6 +215,24 @@ describe('DaemonService', () => {
 
       expect(stats.httpServerRunning).toBe(false);
       expect(stats.httpServerPort).toBe(3002);
+    });
+
+    it('should reflect Gmail MCP stopped state', () => {
+      mockGmailMcp.isRunning.mockReturnValue(false);
+      mockGmailMcp.getStatus.mockReturnValue({
+        running: false,
+        pid: null,
+        requestCount: 0,
+        restartCount: 3,
+        lastError: 'Max restart attempts reached',
+      });
+      
+      service = new DaemonService(mockHttpServer, mockGmailMcp);
+      
+      const stats = service.getStats();
+
+      expect(stats.gmailMcpRunning).toBe(false);
+      expect(stats.gmailMcpStatus.lastError).toBe('Max restart attempts reached');
     });
   });
 

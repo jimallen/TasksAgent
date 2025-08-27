@@ -25,6 +25,43 @@ export const DEFAULT_PORT_RANGES = {
 };
 
 /**
+ * Check if a port is in the valid range (1024-65535)
+ * @param port Port number to check
+ * @returns true if port is valid
+ */
+export function isPortInValidRange(port: number): boolean {
+  return Number.isInteger(port) && port >= MIN_PORT && port <= MAX_PORT;
+}
+
+/**
+ * Suggest alternative ports based on a base port and existing ports
+ * @param basePort The original port that's unavailable
+ * @param usedPorts Array of ports already in use or configured
+ * @returns Array of suggested alternative ports
+ */
+export function suggestAlternativePorts(basePort: number, usedPorts: number[]): number[] {
+  const suggestions: number[] = [];
+  
+  // Try incremental ports
+  for (let offset = 1; offset <= 5; offset++) {
+    const port = basePort + offset;
+    if (isPortInValidRange(port) && !usedPorts.includes(port)) {
+      suggestions.push(port);
+    }
+  }
+  
+  // Try common development ports
+  const commonPorts = [3000, 3001, 3002, 3003, 8080, 8081, 8000, 8001];
+  for (const port of commonPorts) {
+    if (!usedPorts.includes(port) && port !== basePort && !suggestions.includes(port)) {
+      suggestions.push(port);
+    }
+  }
+  
+  return suggestions.slice(0, 10); // Return max 10 suggestions
+}
+
+/**
  * Validate if a port number is within the allowed range
  * @param port Port number to validate
  * @returns Validation result with error message if invalid

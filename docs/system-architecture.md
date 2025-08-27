@@ -16,10 +16,10 @@ graph TB
         TM[Teams Transcripts]
     end
     
-    subgraph "Unified Daemon Service (Port 3002)"
+    subgraph "Unified Daemon Service (Configurable Ports)"
         DS[DaemonService<br/>Core Service Logic]
-        GMCP[Gmail MCP Service<br/>Child Process Manager]
-        HTTP[HTTP Server<br/>All Endpoints]
+        GMCP[Gmail MCP Service<br/>Child Process<br/>Port: Configurable]
+        HTTP[HTTP Server<br/>All Endpoints<br/>Port: Configurable]
         TUI[TUI Interface<br/>Optional Dashboard]
         
         DS --> GMCP
@@ -76,11 +76,24 @@ graph TB
 
 ## Component Details
 
-### 1. Unified Daemon Service (NEW)
+### 1. Unified Daemon Service
 **Location**: `src/daemon.ts`, `src/daemon/`
 - **Single Service Architecture**: One process manages everything
 - **Integrated Gmail MCP**: Child process lifecycle management
-- **HTTP API**: All endpoints on port 3002
+- **Configurable Ports**: 
+  - HTTP Server: Default 3002 (configurable via CLI/env)
+  - Gmail MCP: Default 3000 (configurable via CLI/env)
+- **Port Configuration Methods**:
+  ```bash
+  # CLI Arguments (highest priority)
+  npm run daemon -- --http-port 8080 --gmail-mcp-port 9000
+  
+  # Environment Variables (medium priority)
+  HTTP_SERVER_PORT=8080 GMAIL_MCP_PORT=9000 npm run daemon
+  
+  # Default Values (lowest priority)
+  npm run daemon  # Uses 3002 for HTTP, 3000 for Gmail MCP
+  ```
 - **Endpoints**:
   - `/health` - Service health check
   - `/status` - Detailed statistics
@@ -140,12 +153,13 @@ graph TB
 ### 5. Obsidian Plugin Integration
 **Location**: `obsidian-plugin/`
 - **Connection**: Uses daemon's HTTP API
-- **Endpoints**: `http://localhost:3002/gmail/*`
+- **Endpoints**: `http://localhost:<HTTP_PORT>/gmail/*` (default: 3002)
 - **Features**:
   - Visual task dashboard
   - Manual processing triggers
   - Settings management
   - Real-time status updates
+  - Configurable server URL for custom ports
 
 ## Data Flow
 
@@ -225,12 +239,59 @@ RUN npm install && npm run build
 CMD ["npm", "run", "daemon:headless"]
 ```
 
+## Port Configuration System
+
+### Configuration Priority
+The daemon uses a three-tier priority system for port configuration:
+
+1. **CLI Arguments** (Highest Priority)
+   - `--http-port <port>` - Set HTTP server port
+   - `--gmail-mcp-port <port>` - Set Gmail MCP service port
+   - Supports both `--port=value` and `--port value` syntax
+
+2. **Environment Variables** (Medium Priority)
+   - `HTTP_SERVER_PORT` - HTTP server port
+   - `GMAIL_MCP_PORT` - Gmail MCP service port
+
+3. **Default Values** (Lowest Priority)
+   - HTTP Server: 3002
+   - Gmail MCP: 3000
+
+### Port Validation
+- **Range**: Ports must be between 1024-65535
+- **Conflicts**: HTTP and Gmail MCP must use different ports
+- **Availability**: Automatic detection and alternative suggestions
+- **Error Recovery**: Comprehensive suggestions for all port errors
+
+### Configuration Examples
+```bash
+# View current configuration
+npm run daemon -- --config-dump
+
+# Development with custom ports
+npm run daemon -- --http-port 4000 --gmail-mcp-port 4001
+
+# Production with environment variables
+HTTP_SERVER_PORT=8080 GMAIL_MCP_PORT=8081 npm run daemon:headless
+
+# Docker with port mapping
+docker run -p 8080:3002 -p 9000:3000 meeting-agent
+
+# Multiple instances
+npm run daemon -- --http-port 5000 --gmail-mcp-port 5001  # Instance 1
+npm run daemon -- --http-port 6000 --gmail-mcp-port 6001  # Instance 2
+```
+
 ## Configuration
 
 ### Environment Variables
 ```env
 # Required
 OBSIDIAN_VAULT_PATH=/path/to/vault
+
+# Port Configuration (optional)
+HTTP_SERVER_PORT=3002        # HTTP API server port
+GMAIL_MCP_PORT=3000          # Gmail MCP service port
 
 # Recommended
 ANTHROPIC_API_KEY=sk-ant-api03-xxx

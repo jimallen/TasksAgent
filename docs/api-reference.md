@@ -349,6 +349,94 @@ npm run test:integration
 npm run start:test
 ```
 
+## HTTP API
+
+The daemon exposes an HTTP API on a configurable port (default: 3002).
+
+### Configuration
+```bash
+# Default port
+http://localhost:3002
+
+# With custom port (via CLI argument)
+npm run daemon -- --http-port 8080
+# API available at: http://localhost:8080
+
+# With custom port (via environment)
+HTTP_SERVER_PORT=8080 npm run daemon
+# API available at: http://localhost:8080
+```
+
+### Endpoints
+
+#### `GET /health`
+Health check endpoint with service status.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "gmailMcp": {
+    "connected": true,
+    "status": "running"
+  }
+}
+```
+
+#### `GET /status`
+Detailed daemon statistics.
+
+**Response:**
+```json
+{
+  "status": "running",
+  "totalRuns": 42,
+  "successfulRuns": 40,
+  "failedRuns": 2,
+  "emailsProcessed": 156,
+  "tasksExtracted": 234,
+  "notesCreated": 45,
+  "gmailMcpRunning": true,
+  "lastRun": "2024-03-15T10:30:00Z",
+  "nextRun": "2024-03-15T13:00:00Z"
+}
+```
+
+#### `POST /trigger`
+Manually trigger email processing.
+
+**Request Body:**
+```json
+{
+  "source": "manual",
+  "hoursBack": 120
+}
+```
+
+#### `GET /gmail/health`
+Gmail MCP service health check.
+
+#### `POST /gmail/search`
+Search Gmail emails (proxied to Gmail MCP).
+
+**Request Body:**
+```json
+{
+  "query": "subject:meeting after:2024-03-01",
+  "maxResults": 50
+}
+```
+
+#### `POST /gmail/read`
+Read email by ID (proxied to Gmail MCP).
+
+**Request Body:**
+```json
+{
+  "emailId": "msg123456"
+}
+```
+
 ## Daemon Service API
 
 ### DaemonService

@@ -33,7 +33,7 @@ interface MeetingTasksSettings {
 const DEFAULT_SETTINGS: MeetingTasksSettings = {
   lookbackHours: 120,
   debugMode: false,
-  mcpServerUrl: 'http://localhost:3000',
+  mcpServerUrl: 'http://localhost:3002/gmail',  // Updated to daemon Gmail endpoint
   anthropicApiKey: '',
   notesFolder: 'Meetings',
   claudeModel: 'claude-3-5-haiku-20241022',
@@ -70,7 +70,7 @@ class GmailMcpHttpService {
       console.log(`[GmailService] Connection ${this.connected ? 'successful' : 'failed'}`);
       return this.connected;
     } catch (error) {
-      console.error('Failed to connect to MCP server:', error);
+      console.error('Failed to connect to Gmail MCP service:', error);
       this.connected = false;
       return false;
     }
@@ -78,23 +78,20 @@ class GmailMcpHttpService {
 
   async searchEmails(query: string, maxResults: number = 50): Promise<any[]> {
     if (!this.connected) {
-      throw new Error('Not connected to MCP server');
+      throw new Error('Not connected to Gmail MCP service');
     }
     
     try {
       console.log(`[searchEmails] Sending request with query: ${query}`);
       const response = await requestUrl({
-        url: `${this.serverUrl}/mcp`,
+        url: `${this.serverUrl}/search`,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          method: 'search_emails',
-          params: {
-            query,
-            maxResults
-          }
+          query,
+          maxResults
         })
       });
       
@@ -105,9 +102,9 @@ class GmailMcpHttpService {
         throw new Error(data.error);
       }
       
-      if (data.result && data.result.emails) {
-        console.log(`[searchEmails] Returning ${data.result.emails.length} emails`);
-        return data.result.emails;
+      if (data.success && data.results) {
+        console.log(`[searchEmails] Returning ${data.results.length} emails`);
+        return data.results;
       }
       
       console.log(`[searchEmails] No emails in response, returning empty array`);
@@ -120,21 +117,18 @@ class GmailMcpHttpService {
   
   async getEmailContent(emailId: string): Promise<string> {
     if (!this.connected) {
-      throw new Error('Not connected to MCP server');
+      throw new Error('Not connected to Gmail MCP service');
     }
     
     try {
       const response = await requestUrl({
-        url: `${this.serverUrl}/mcp`,
+        url: `${this.serverUrl}/read`,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          method: 'read_email',
-          params: {
-            messageId: emailId
-          }
+          messageId: emailId
         })
       });
       
@@ -144,8 +138,9 @@ class GmailMcpHttpService {
         throw new Error(data.error);
       }
       
-      if (data.result && data.result.content) {
-        return data.result.content;
+      if (data.success && data.email) {
+        // Return the email body if available, otherwise return the whole email object as string
+        return data.email.body || JSON.stringify(data.email);
       }
       
       return '';
@@ -371,7 +366,7 @@ export default class MeetingTasksPlugin extends Plugin {
         this.updateStatus('Gmail connected');
       } else {
         this.updateStatus('Gmail offline');
-        new Notice('Gmail MCP server not running. Start it with: npm run gmail-mcp-http');
+        new Notice('Gmail MCP not available. Start the daemon with: npm run daemon');
       }
       
       // Initialize Claude extractor if API key is present
@@ -895,10 +890,10 @@ class MeetingTasksSettingTab extends PluginSettingTab {
     containerEl.createEl('h3', {text: 'Gmail Settings'});
     
     new Setting(containerEl)
-      .setName('MCP Server URL')
-      .setDesc('URL of the Gmail MCP HTTP server')
+      .setName('Gmail Service URL')
+      .setDesc('URL of the daemon Gmail service endpoints')
       .addText(text => text
-        .setPlaceholder('http://localhost:3000')
+        .setPlaceholder('http://localhost:3002/gmail')
         .setValue(this.plugin.settings.mcpServerUrl)
         .onChange(async (value) => {
           this.plugin.settings.mcpServerUrl = value;
@@ -1033,7 +1028,7 @@ class MeetingTasksSettingTab extends PluginSettingTab {
     const claudeConfigured = !!this.plugin.settings.anthropicApiKey;
     
     statusDiv.createEl('p', {
-      text: gmailConnected ? '✅ Gmail MCP connected' : '❌ Gmail MCP not connected',
+      text: gmailConnected ? '✅ Gmail service connected' : '❌ Gmail service not connected (start daemon)',
       cls: gmailConnected ? 'mod-success' : 'mod-warning'
     });
     

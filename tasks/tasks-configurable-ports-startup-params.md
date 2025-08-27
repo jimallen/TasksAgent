@@ -64,35 +64,35 @@ Generated from: `prd-configurable-ports-startup-params.md`
   - [x] 3.7 Update `src/config/config.spec.ts` with tests for priority resolution and validation
 
 - [ ] **4.0 Update Service Constructors and Port Configuration**
-  - [ ] 4.1 Update `src/daemon/httpServer.ts` constructor to accept PortConfiguration object
-  - [ ] 4.2 Remove hardcoded port defaults and use configuration object throughout httpServer.ts
-  - [ ] 4.3 Update port conflict error messages to reference CLI parameters instead of just environment variables
-  - [ ] 4.4 Enhance alternative port selection to use configured ranges and validation
-  - [ ] 4.5 Update `src/daemon/httpServer.spec.ts` with tests for configuration-based constructor
-  - [ ] 4.6 Add tests for new error messages mentioning CLI parameters and configuration options
+  - [x] 4.1 Update `src/daemon/httpServer.ts` constructor to accept PortConfiguration object
+  - [x] 4.2 Remove hardcoded port defaults and use configuration object throughout httpServer.ts
+  - [x] 4.3 Update port conflict error messages to reference CLI parameters instead of just environment variables
+  - [x] 4.4 Enhance alternative port selection to use configured ranges and validation
+  - [x] 4.5 Update `src/daemon/httpServer.spec.ts` with tests for configuration-based constructor
+  - [x] 4.6 Add tests for new error messages mentioning CLI parameters and configuration options
 
 - [ ] **5.0 Integrate Gmail MCP Port Configuration**
-  - [ ] 5.1 Update `src/daemon/gmailMcpService.ts` to accept port configuration in constructor
-  - [ ] 5.2 Add environment variable passing to Gmail MCP child process with configured port
-  - [ ] 5.3 Update Gmail MCP health check endpoints to use dynamically configured port
-  - [ ] 5.4 Handle Gmail MCP port conflicts and provide clear error messages with CLI parameter guidance
-  - [ ] 5.5 Update `src/daemon/gmailMcpService.spec.ts` with tests for port configuration and environment passing
-  - [ ] 5.6 Add integration tests for Gmail MCP service startup with custom ports
+  - [x] 5.1 Update `src/daemon/gmailMcpService.ts` to accept port configuration in constructor
+  - [x] 5.2 Add environment variable passing to Gmail MCP child process with configured port
+  - [x] 5.3 Update Gmail MCP health check endpoints to use dynamically configured port
+  - [x] 5.4 Handle Gmail MCP port conflicts and provide clear error messages with CLI parameter guidance
+  - [x] 5.5 Update `src/daemon/gmailMcpService.spec.ts` with tests for port configuration and environment passing
+  - [x] 5.6 Add integration tests for Gmail MCP service startup with custom ports
 
 - [ ] **6.0 Add Comprehensive Testing Suite for CLI and Port Configuration**
-  - [ ] 6.1 Create `src/daemon/integration.spec.ts` for end-to-end daemon startup tests with various port configurations
-  - [ ] 6.2 Add tests for successful daemon startup with custom HTTP and Gmail MCP ports
-  - [ ] 6.3 Add tests for port conflict scenarios and error handling with multiple services
-  - [ ] 6.4 Add tests for configuration priority resolution with CLI args overriding environment variables
-  - [ ] 6.5 Create `src/cli/integration.spec.ts` for CLI parsing integration with actual service startup
-  - [ ] 6.6 Add tests for --config-dump functionality showing resolved configuration values
-  - [ ] 6.7 Add tests for help text generation and error message clarity
+  - [x] 6.1 Create `src/daemon/integration.spec.ts` for end-to-end daemon startup tests with various port configurations
+  - [x] 6.2 Add tests for successful daemon startup with custom HTTP and Gmail MCP ports
+  - [x] 6.3 Add tests for port conflict scenarios and error handling with multiple services
+  - [x] 6.4 Add tests for configuration priority resolution with CLI args overriding environment variables
+  - [x] 6.5 Create `src/cli/integration.spec.ts` for CLI parsing integration with actual service startup
+  - [x] 6.6 Add tests for --config-dump functionality showing resolved configuration values
+  - [x] 6.7 Add tests for help text generation and error message clarity
 
-- [ ] **7.0 Update Documentation and Help System**
-  - [ ] 7.1 Update `src/daemon.ts` to integrate argumentParser and pass configuration to services
-  - [ ] 7.2 Replace basic process.argv parsing with comprehensive CLI parser in daemon.ts
-  - [ ] 7.3 Add startup logging to display active port configuration for debugging
-  - [ ] 7.4 Update showHelp() function in daemon.ts to include new port configuration options
-  - [ ] 7.5 Add examples in help text for common port configuration scenarios (development, production, Docker)
-  - [ ] 7.6 Update `package.json` scripts section comments to document new CLI parameter usage
-  - [ ] 7.7 Add error recovery suggestions that reference both CLI parameters and environment variables
+- [x] **7.0 Update Documentation and Help System**
+  - [x] 7.1 Update `src/daemon.ts` to integrate argumentParser and pass configuration to services
+  - [x] 7.2 Replace basic process.argv parsing with comprehensive CLI parser in daemon.ts
+  - [x] 7.3 Add startup logging to display active port configuration for debugging
+  - [x] 7.4 Update showHelp() function in daemon.ts to include new port configuration options
+  - [x] 7.5 Add examples in help text for common port configuration scenarios (development, production, Docker)
+  - [x] 7.6 Update `package.json` scripts section comments to document new CLI parameter usage
+  - [x] 7.7 Add error recovery suggestions that reference both CLI parameters and environment variables

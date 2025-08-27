@@ -7,20 +7,33 @@ import express from 'express';
 import cors from 'cors';
 import * as net from 'net';
 import { DaemonService } from './service';
+import { GmailMcpService } from './gmailMcpService';
 import logger from '../utils/logger';
+import { getResolvedPorts, getPortConfigDetails } from '../config/config';
+import { isPortInValidRange, suggestAlternativePorts } from '../cli/portValidator';
 
 export class DaemonHttpServer {
   private app: express.Application;
   private daemonService: DaemonService;
-  private port: number;
+  private gmailMcpService?: GmailMcpService;
+  private port: number = 0;
   private server: any;
   private running: boolean = false;
   private connections: Set<any> = new Set();
   private startupTime: Date | null = null;
 
-  constructor(daemonService: DaemonService, port = 3000) {
+  /**
+   * Create a new HTTP server for the daemon
+   * @param daemonService The daemon service instance
+   * @param gmailMcpService Optional Gmail MCP service instance
+   */
+  constructor(
+    daemonService: DaemonService, 
+    gmailMcpService?: GmailMcpService
+  ) {
     this.daemonService = daemonService;
-    this.port = port;
+    this.gmailMcpService = gmailMcpService;
+    
     this.app = express();
     
     // Middleware
@@ -29,6 +42,11 @@ export class DaemonHttpServer {
     
     // Setup routes
     this.setupRoutes();
+    
+    // Setup Gmail routes if service is available
+    if (this.gmailMcpService) {
+      this.setupGmailRoutes();
+    }
   }
 
   private async checkPortAvailable(port: number): Promise<boolean> {
@@ -67,6 +85,12 @@ export class DaemonHttpServer {
           startupTime: this.startupTime,
           uptime: httpUptime
         },
+        gmailMcp: this.gmailMcpService ? {
+          running: stats.gmailMcpRunning || false,
+          pid: stats.gmailMcpPid,
+          port: this.gmailMcpService.getPort(),
+          requestCount: stats.gmailMcpRequestCount || 0
+        } : { configured: false },
         stats: {
           totalRuns: stats.totalRuns,
           emailsProcessed: stats.emailsProcessed,
@@ -159,16 +183,211 @@ export class DaemonHttpServer {
     });
   }
 
+  private setupGmailRoutes(): void {
+    if (!this.gmailMcpService) {
+      logger.warn('[HTTP Server] Gmail routes not set up - Gmail MCP service not provided');
+      return;
+    }
+
+    // Gmail health check endpoint
+    this.app.get('/gmail/health', (_req, res) => {
+      if (!this.gmailMcpService) {
+        res.status(503).json({
+          status: 'unavailable',
+          error: 'Gmail MCP service not configured'
+        });
+        return;
+      }
+
+      const status = this.gmailMcpService.getStatus();
+      res.json({
+        status: status.running ? 'healthy' : 'unhealthy',
+        running: status.running,
+        pid: status.pid,
+        port: this.gmailMcpService.getPort(),
+        uptime: status.uptime,
+        requestCount: status.requestCount,
+        errorCount: status.errorCount,
+        lastError: status.lastError,
+        restartCount: status.restartCount
+      });
+    });
+
+    // Gmail search endpoint
+    this.app.post('/gmail/search', async (req, res) => {
+      if (!this.gmailMcpService) {
+        res.status(503).json({
+          success: false,
+          error: 'Gmail MCP service not configured'
+        });
+        return;
+      }
+
+      try {
+        const { query, maxResults, pageToken, labelIds } = req.body;
+        
+        if (!this.gmailMcpService.isRunning()) {
+          res.status(503).json({
+            success: false,
+            error: 'Gmail MCP service is not running'
+          });
+          return;
+        }
+
+        logger.info(`[Gmail] Search request: ${query || 'all'}, max: ${maxResults || 'default'}`);
+        
+        const results = await this.gmailMcpService.searchEmails({
+          query,
+          maxResults,
+          pageToken,
+          labelIds
+        });
+        
+        res.json({
+          success: true,
+          results,
+          count: results.length
+        });
+      } catch (error: any) {
+        logger.error('[Gmail] Search error:', error);
+        res.status(500).json({
+          success: false,
+          error: error?.message || 'Search failed'
+        });
+      }
+    });
+
+    // Gmail read email endpoint
+    this.app.post('/gmail/read', async (req, res) => {
+      if (!this.gmailMcpService) {
+        res.status(503).json({
+          success: false,
+          error: 'Gmail MCP service not configured'
+        });
+        return;
+      }
+
+      try {
+        const { messageId, format } = req.body;
+        
+        if (!messageId) {
+          res.status(400).json({
+            success: false,
+            error: 'messageId is required'
+          });
+          return;
+        }
+        
+        if (!this.gmailMcpService.isRunning()) {
+          res.status(503).json({
+            success: false,
+            error: 'Gmail MCP service is not running'
+          });
+          return;
+        }
+
+        logger.info(`[Gmail] Read email request: ${messageId}, format: ${format || 'default'}`);
+        
+        const email = await this.gmailMcpService.readEmail({
+          messageId,
+          format
+        });
+        
+        res.json({
+          success: true,
+          email
+        });
+      } catch (error: any) {
+        logger.error('[Gmail] Read email error:', error);
+        res.status(500).json({
+          success: false,
+          error: error?.message || 'Failed to read email'
+        });
+      }
+    });
+
+    // Gmail generic MCP proxy endpoint
+    this.app.post('/gmail/mcp', async (req, res) => {
+      if (!this.gmailMcpService) {
+        res.status(503).json({
+          success: false,
+          error: 'Gmail MCP service not configured'
+        });
+        return;
+      }
+
+      try {
+        const { method, params } = req.body;
+        
+        if (!method) {
+          res.status(400).json({
+            success: false,
+            error: 'method is required'
+          });
+          return;
+        }
+        
+        if (!this.gmailMcpService.isRunning()) {
+          res.status(503).json({
+            success: false,
+            error: 'Gmail MCP service is not running'
+          });
+          return;
+        }
+
+        logger.info(`[Gmail] MCP request: ${method}`, params);
+        
+        const result = await this.gmailMcpService.sendRequest(method, params);
+        
+        res.json({
+          success: true,
+          result
+        });
+      } catch (error: any) {
+        logger.error('[Gmail] MCP proxy error:', error);
+        res.status(500).json({
+          success: false,
+          error: error?.message || 'MCP request failed',
+          code: (error as any)?.code
+        });
+      }
+    });
+
+    // Gmail status endpoint
+    this.app.get('/gmail/status', (_req, res) => {
+      if (!this.gmailMcpService) {
+        res.status(503).json({
+          configured: false,
+          error: 'Gmail MCP service not configured'
+        });
+        return;
+      }
+
+      const status = this.gmailMcpService.getStatus();
+      res.json({
+        configured: true,
+        port: this.gmailMcpService.getPort(),
+        ...status
+      });
+    });
+
+    logger.info('[HTTP Server] Gmail routes configured at /gmail/*');
+  }
+
   async start(): Promise<void> {
-    // Check for environment variable override
-    const envPort = process.env['HTTP_SERVER_PORT'];
-    if (envPort) {
-      const parsedPort = parseInt(envPort, 10);
-      if (!isNaN(parsedPort) && parsedPort > 0 && parsedPort < 65536) {
-        this.port = parsedPort;
-        logger.info(`[HTTP Server] Using port ${this.port} from HTTP_SERVER_PORT environment variable`);
-      } else {
-        logger.warn(`[HTTP Server] Invalid HTTP_SERVER_PORT value: ${envPort}, using default port ${this.port}`);
+    // Get the resolved port from configuration
+    // This handles CLI args > Environment > Default priority
+    const ports = getResolvedPorts();
+    this.port = ports.httpServer;
+    
+    const details = getPortConfigDetails();
+    logger.info(`[HTTP Server] Starting with port ${this.port} from ${details.httpServer.source}`);
+    
+    // Log all available sources for debugging
+    if (details.httpServer.allSources.length > 1) {
+      logger.debug('[HTTP Server] Configuration sources:');
+      for (const source of details.httpServer.allSources) {
+        logger.debug(`  - ${source.source}: ${source.value} (priority: ${source.priority})`);
       }
     }
 
@@ -177,10 +396,36 @@ export class DaemonHttpServer {
     if (!isAvailable) {
       logger.warn(`[HTTP Server] Port ${this.port} is not available, attempting to find alternative port...`);
       
-      // Try a few alternative ports
-      const alternativePorts = [3003, 3004, 3005, 8080, 8081];
-      let foundPort = false;
+      // Get all configured ports to avoid conflicts
+      const ports = getResolvedPorts();
+      const usedPorts = [ports.httpServer, ports.gmailMcp];
       
+      // Generate intelligent alternatives using our port validation utility
+      const suggestedPorts = suggestAlternativePorts(this.port, usedPorts);
+      
+      // Also add some additional alternatives based on the base port
+      const basePort = this.port;
+      const alternativePorts: number[] = [...suggestedPorts];
+      
+      // Add sequential ports if not already included
+      for (let offset = 1; offset <= 10; offset++) {
+        const altPort = basePort + offset;
+        if (isPortInValidRange(altPort) && !alternativePorts.includes(altPort) && !usedPorts.includes(altPort)) {
+          alternativePorts.push(altPort);
+        }
+      }
+      
+      // Try ports in reverse order if base is high
+      if (basePort > 5000) {
+        for (let offset = 1; offset <= 5; offset++) {
+          const altPort = basePort - offset;
+          if (isPortInValidRange(altPort) && !alternativePorts.includes(altPort) && !usedPorts.includes(altPort)) {
+            alternativePorts.push(altPort);
+          }
+        }
+      }
+      
+      let foundPort = false;
       for (const altPort of alternativePorts) {
         if (await this.checkPortAvailable(altPort)) {
           this.port = altPort;
@@ -191,10 +436,12 @@ export class DaemonHttpServer {
       }
       
       if (!foundPort) {
-        logger.error(`[HTTP Server] No available ports found. Tried: ${this.port}, ${alternativePorts.join(', ')}`);
+        const testedPorts = alternativePorts.slice(0, 10).join(', ');
+        logger.error(`[HTTP Server] No available ports found. Tested: ${this.port}, ${testedPorts}${alternativePorts.length > 10 ? '...' : ''}`);
         logger.error(`[HTTP Server] To fix this issue:`);
-        logger.error(`[HTTP Server]   1. Kill the process using port: lsof -ti:${this.port} | xargs kill -9`);
-        logger.error(`[HTTP Server]   2. Set HTTP_SERVER_PORT environment variable to a different port`);
+        logger.error(`[HTTP Server]   1. Kill the process using port: lsof -ti:${basePort} | xargs kill -9`);
+        logger.error(`[HTTP Server]   2. Use --http-port <port> CLI argument or set HTTP_SERVER_PORT=<port> environment variable`);
+        logger.error(`[HTTP Server]   3. Check if Gmail MCP is conflicting on port ${ports.gmailMcp}`);
         throw new Error(`No available ports found for HTTP server`);
       }
     }
@@ -221,6 +468,15 @@ export class DaemonHttpServer {
         logger.info('  POST /start - Start daemon');
         logger.info('  POST /stop - Stop daemon');
         logger.info('  POST /reset - Reset processed emails data');
+        
+        if (this.gmailMcpService) {
+          logger.info('Gmail MCP endpoints:');
+          logger.info('  GET  /gmail/health - Gmail MCP health check');
+          logger.info('  GET  /gmail/status - Gmail MCP detailed status');
+          logger.info('  POST /gmail/search - Search Gmail emails');
+          logger.info('  POST /gmail/read - Read Gmail email by ID');
+          logger.info('  POST /gmail/mcp - Generic MCP proxy');
+        }
         resolve();
       });
       
@@ -231,7 +487,7 @@ export class DaemonHttpServer {
           logger.error('[HTTP Server] This usually means another instance is already running');
           logger.error('[HTTP Server] Possible solutions:');
           logger.error(`[HTTP Server]   1. Kill the process using port ${this.port}: lsof -ti:${this.port} | xargs kill -9`);
-          logger.error(`[HTTP Server]   2. Use a different port by setting HTTP_SERVER_PORT environment variable`);
+          logger.error(`[HTTP Server]   2. Use --http-port <port> CLI argument or set HTTP_SERVER_PORT=<port> environment variable`);
           logger.error(`[HTTP Server]   3. Check for other running instances: ps aux | grep "npm run daemon"`);
           logger.error(`[HTTP Server]   4. Wait for the other process to finish`);
           reject(new Error(`Port ${this.port} is already in use`));
@@ -239,8 +495,8 @@ export class DaemonHttpServer {
           logger.error(`[HTTP Server] Permission denied to use port ${this.port}`);
           logger.error('[HTTP Server] Port numbers below 1024 require elevated privileges');
           logger.error('[HTTP Server] Possible solutions:');
-          logger.error('[HTTP Server]   1. Use a port number above 1024 (e.g., 3002, 8080)');
-          logger.error('[HTTP Server]   2. Set HTTP_SERVER_PORT=8080 in your environment');
+          logger.error('[HTTP Server]   1. Use a port number above 1024');
+          logger.error('[HTTP Server]   2. Use --http-port <port> CLI argument or set HTTP_SERVER_PORT=<port> environment variable');
           logger.error('[HTTP Server]   3. Run with elevated privileges (not recommended): sudo npm run daemon');
           reject(new Error(`Permission denied for port ${this.port}`));
         } else if (error.code === 'ENOTFOUND' || error.code === 'ENOENT') {
@@ -255,7 +511,7 @@ export class DaemonHttpServer {
           logger.error(`[HTTP Server] Error code: ${error.code || 'unknown'}`);
           logger.error('[HTTP Server] Possible solutions:');
           logger.error('[HTTP Server]   1. Check system logs for more details');
-          logger.error('[HTTP Server]   2. Try a different port with HTTP_SERVER_PORT environment variable');
+          logger.error('[HTTP Server]   2. Try a different port with --http-port <port> CLI argument or HTTP_SERVER_PORT=<port> environment variable');
           logger.error('[HTTP Server]   3. Restart the daemon service');
           logger.error('[HTTP Server]   4. Check firewall/security settings');
           reject(error);

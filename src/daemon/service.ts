@@ -4,6 +4,7 @@ import logger from '../utils/logger';
 import Database from 'better-sqlite3';
 import * as path from 'path';
 import { DaemonHttpServer } from './httpServer';
+import { GmailMcpService } from './gmailMcpService';
 
 export interface ServiceStats {
   startTime: Date;
@@ -19,6 +20,9 @@ export interface ServiceStats {
   nextScheduledRun: Date | null;
   httpServerRunning?: boolean;
   httpServerPort?: number;
+  gmailMcpRunning?: boolean;
+  gmailMcpPid?: number;
+  gmailMcpRequestCount?: number;
 }
 
 export class DaemonService extends EventEmitter {
@@ -28,11 +32,13 @@ export class DaemonService extends EventEmitter {
   private isProcessing = false;
   private stopRequested = false;
   private httpServer?: DaemonHttpServer;
+  private gmailMcpService?: GmailMcpService;
 
-  constructor(httpServer?: DaemonHttpServer) {
+  constructor(httpServer?: DaemonHttpServer, gmailMcpService?: GmailMcpService) {
     super();
     this.processor = new EmailProcessor();
     this.httpServer = httpServer;
+    this.gmailMcpService = gmailMcpService;
     this.stats = {
       startTime: new Date(),
       lastRun: null,
@@ -258,6 +264,14 @@ export class DaemonService extends EventEmitter {
       stats.httpServerPort = this.httpServer.getPort();
     }
     
+    // Include Gmail MCP status if available
+    if (this.gmailMcpService) {
+      const gmailStatus = this.gmailMcpService.getStatus();
+      stats.gmailMcpRunning = gmailStatus.running;
+      stats.gmailMcpPid = gmailStatus.pid;
+      stats.gmailMcpRequestCount = gmailStatus.requestCount;
+    }
+    
     return stats;
   }
 
@@ -331,6 +345,13 @@ export class DaemonService extends EventEmitter {
   }
 
   async cleanup(): Promise<void> {
+    if (this.gmailMcpService) {
+      try {
+        await this.gmailMcpService.cleanup();
+      } catch (error) {
+        logger.error('Error cleaning up Gmail MCP service:', error);
+      }
+    }
     if (this.httpServer) {
       try {
         await this.httpServer.stop();

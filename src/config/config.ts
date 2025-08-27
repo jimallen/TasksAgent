@@ -315,6 +315,20 @@ export function getResolvedPorts(): { httpServer: number; gmailMcp: number } {
 }
 
 /**
+ * Apply port configuration from CLI arguments
+ * @param cliConfig Object with optional httpPort and gmailMcpPort
+ */
+export function applyPortConfiguration(cliConfig: { httpPort?: number; gmailMcpPort?: number }): void {
+  if (cliConfig.httpPort !== undefined) {
+    config.ports.httpServer.setCLI(cliConfig.httpPort);
+  }
+  
+  if (cliConfig.gmailMcpPort !== undefined) {
+    config.ports.gmailMcp.setCLI(cliConfig.gmailMcpPort);
+  }
+}
+
+/**
  * Get port configuration details including sources
  * @returns Detailed port configuration with sources
  */

@@ -23,10 +23,32 @@
     "check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "setup:gmail": "ts-node src/scripts/setupGmail.ts",
-    "gmail-mcp-http": "node scripts/gmail-mcp-http.js",
-    "daemon:manual": "npm run build && node dist/daemon.js --manual-only",
-    "start:all": "./start-all.sh",
-    "stop:all": "./stop-all.sh"
+    "daemon:manual": "npm run build && node dist/daemon.js --manual-only"
+  },
+  "scripts-info": {
+    "_comment": "Documentation for script CLI parameters",
+    "daemon": "Start daemon with TUI. Supports: --http-port <port> --gmail-mcp-port <port> --headless --config-dump --help --version",
+    "daemon:headless": "Start daemon in background. Supports: --http-port <port> --gmail-mcp-port <port> --config-dump",
+    "daemon:examples": [
+      "npm run daemon -- --http-port 8080                    # Custom HTTP port",
+      "npm run daemon -- --gmail-mcp-port 9000               # Custom Gmail MCP port", 
+      "npm run daemon -- --http-port 8080 --gmail-mcp-port 9000  # Both custom ports",
+      "npm run daemon:headless -- --http-port 8080           # Headless with custom port",
+      "npm run daemon -- --config-dump                       # Show resolved configuration",
+      "npm run daemon -- --help                              # Show all options"
+    ],
+    "port-configuration": {
+      "defaults": {
+        "http-server": 3002,
+        "gmail-mcp": 3000
+      },
+      "environment-variables": {
+        "HTTP_SERVER_PORT": "Alternative to --http-port",
+        "GMAIL_MCP_PORT": "Alternative to --gmail-mcp-port"
+      },
+      "priority": "CLI arguments > Environment variables > Default values",
+      "constraints": "Ports must be between 1024-65535 and different for each service"
+    }
   },
   "keywords": [
     "gmail",

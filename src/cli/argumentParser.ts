@@ -314,7 +314,10 @@ export function parseArguments(args: string[]): CLIParseResult {
     if (!isValidPortConfiguration(portConfig)) {
       if (arguments_.httpPort === arguments_.gmailMcpPort) {
         errors.push(`Port conflict: HTTP Server and Gmail MCP Service cannot use the same port (${arguments_.httpPort})`);
-        errors.push('Suggestion: Use different ports for each service, e.g., --http-port 3002 --gmail-mcp-port 3001');
+        errors.push('Solutions:');
+        errors.push('  CLI: --http-port 3002 --gmail-mcp-port 3001');
+        errors.push('  Environment: HTTP_SERVER_PORT=3002 GMAIL_MCP_PORT=3001');
+        errors.push('  View configuration: --config-dump');
       }
     }
   }
@@ -372,18 +375,40 @@ export function generateHelpInfo(): HelpInfo {
       title: 'Common Usage Examples',
       description: 'Typical deployment scenarios',
       examples: [
-        '# Development with custom ports',
+        '# Development - Local testing with non-standard ports',
         'npm run daemon --http-port 3333 --gmail-mcp-port 3334',
         '',
-        '# Production deployment',
-        'npm run daemon:headless --http-port 8080',
+        '# Development - Multiple developers on same machine',
+        'npm run daemon --http-port 4000 --gmail-mcp-port 4001  # Developer A',
+        'npm run daemon --http-port 5000 --gmail-mcp-port 5001  # Developer B',
         '',
-        '# Docker container',
-        'npm run daemon:headless --http-port 3000 --gmail-mcp-port 3001',
+        '# Production - Standard web port with headless mode',
+        'npm run daemon:headless --http-port 8080 --gmail-mcp-port 3000',
         '',
-        '# Multiple instances (different ports)',
-        'npm run daemon:headless --http-port 8080 --gmail-mcp-port 8081',
-        'npm run daemon:headless --http-port 8082 --gmail-mcp-port 8083'
+        '# Production - Behind reverse proxy (nginx/apache)',
+        'npm run daemon:headless --http-port 3002  # Default internal port',
+        '',
+        '# Docker - Container with exposed ports',
+        'docker run -p 8080:8080 -p 9000:9000 myapp \\',
+        '  npm run daemon:headless --http-port 8080 --gmail-mcp-port 9000',
+        '',
+        '# Docker Compose - Service configuration',
+        'services:',
+        '  daemon:',
+        '    command: npm run daemon:headless --http-port 3002 --gmail-mcp-port 3000',
+        '    ports:',
+        '      - "8080:3002"  # Map external 8080 to internal 3002',
+        '      - "9000:3000"  # Map external 9000 to internal 3000',
+        '',
+        '# Multiple instances - Different services or environments',
+        'npm run daemon:headless --http-port 8080 --gmail-mcp-port 8081  # Instance 1',
+        'npm run daemon:headless --http-port 8082 --gmail-mcp-port 8083  # Instance 2',
+        '',
+        '# Environment variables - Alternative configuration method',
+        'HTTP_SERVER_PORT=8080 GMAIL_MCP_PORT=9000 npm run daemon:headless',
+        '',
+        '# Systemd service - Production Linux deployment',
+        'ExecStart=/usr/bin/npm run daemon:headless --http-port 8080 --gmail-mcp-port 3000'
       ]
     }
   ];

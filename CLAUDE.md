@@ -25,6 +25,14 @@ npm run start:once     # Process emails once and exit
 npm start              # Classic scheduler mode (9 AM, 1 PM, 5 PM)
 npm run daemon         # Daemon with TUI dashboard - includes Gmail MCP (recommended)
 npm run daemon:headless # Daemon without UI - includes Gmail MCP (for servers)
+
+# With custom ports (NEW)
+npm run daemon -- --http-port 8080 --gmail-mcp-port 9000
+npm run daemon:headless -- --http-port 8080
+
+# View configuration
+npm run daemon -- --config-dump
+npm run daemon -- --help
 ```
 
 ### Gmail MCP Setup
@@ -40,9 +48,9 @@ npx @gongrzhe/server-gmail-autoauth-mcp  # Authenticate Gmail MCP (one-time setu
 ### Unified Daemon Architecture (NEW)
 The system now uses a single unified daemon with integrated Gmail MCP:
 
-1. **Unified Daemon** (`src/daemon.ts`) - Main entry point and service coordinator
-2. **Gmail MCP Service** (`src/daemon/gmailMcpService.ts`) - Child process manager for Gmail MCP
-3. **HTTP Server** (`src/daemon/httpServer.ts`) - All endpoints on port 3002
+1. **Unified Daemon** (`src/daemon.ts`) - Main entry point with CLI argument parsing
+2. **Gmail MCP Service** (`src/daemon/gmailMcpService.ts`) - Child process manager (configurable port)
+3. **HTTP Server** (`src/daemon/httpServer.ts`) - All endpoints (configurable port, default 3002)
 4. **Email Processing Pipeline**:
    - **GmailService** (`src/services/gmailService.ts`) - Connects to daemon's Gmail endpoints
    - **Email Parser** (`src/parsers/emailParser.ts`) - Identifies meeting transcripts
@@ -52,21 +60,28 @@ The system now uses a single unified daemon with integrated Gmail MCP:
 6. **TUI Interface** (`src/tui/interface.ts`) - Optional terminal dashboard
 
 ### Daemon Service Endpoints
-- **Port 3002**: Unified HTTP API with integrated Gmail MCP
+- **Configurable Ports**: HTTP and Gmail MCP ports can be configured via CLI or environment
+  - HTTP Server: Default 3002 (--http-port or HTTP_SERVER_PORT)
+  - Gmail MCP: Default 3000 (--gmail-mcp-port or GMAIL_MCP_PORT)
+- **HTTP API Endpoints**:
   - `/health`, `/status`, `/trigger` - Daemon control endpoints
   - `/gmail/*` - Gmail MCP proxy endpoints (integrated)
-- **Gmail MCP**: Now runs as managed child process within daemon
 - **Single Service**: `npm run daemon` starts everything
 
 ### Daemon Service Architecture
-- `src/daemon.ts` - Entry point with TUI/headless mode detection
+- `src/daemon.ts` - Entry point with CLI argument parsing and port configuration
+- `src/cli/argumentParser.ts` - Comprehensive CLI parsing with validation
+- `src/cli/portValidator.ts` - Port range validation and conflict detection
+- `src/config/config.ts` - Priority-based configuration resolution
 - `src/daemon/service.ts` - Background service with manual trigger support
-- `src/daemon/httpServer.ts` - HTTP API for external control (port 3002)
+- `src/daemon/httpServer.ts` - HTTP API for external control (configurable port)
+- `src/daemon/gmailMcpService.ts` - Gmail MCP child process manager (configurable port)
 - `src/tui/interface.ts` - blessed-based terminal UI with statistics
 - `daemon-stats.db` - Persistent metrics storage
 
 ### Key Design Patterns
-- **MCP Protocol**: Gmail integration uses Model Context Protocol server running on port 3000
+- **Port Configuration**: Three-tier priority system (CLI > Environment > Default)
+- **MCP Protocol**: Gmail integration uses Model Context Protocol server
 - **Rate Limiting**: Built-in protection for Gmail API quotas (250 units/sec)
 - **Error Recovery**: Comprehensive error handling with retry logic
 - **State Management**: SQLite for processed email tracking and deduplication
@@ -75,11 +90,32 @@ The system now uses a single unified daemon with integrated Gmail MCP:
 
 ## Critical Configuration
 
+### Port Configuration (NEW)
+```bash
+# Three ways to configure ports (priority order):
+
+# 1. CLI Arguments (highest priority)
+npm run daemon -- --http-port 8080 --gmail-mcp-port 9000
+
+# 2. Environment Variables
+HTTP_SERVER_PORT=8080 GMAIL_MCP_PORT=9000 npm run daemon
+
+# 3. Default Values (lowest priority)
+# HTTP: 3002, Gmail MCP: 3000
+
+# View active configuration
+npm run daemon -- --config-dump
+```
+
 ### Required Environment Variables (.env)
 ```bash
 OBSIDIAN_VAULT_PATH=/absolute/path/to/vault  # Required
 ANTHROPIC_API_KEY=sk-ant-api03-xxx          # Recommended for AI extraction
 GMAIL_HOURS_LOOKBACK=120                    # Default: 120 hours (5 days)
+
+# Optional port configuration
+HTTP_SERVER_PORT=3002                       # HTTP API server port
+GMAIL_MCP_PORT=3000                         # Gmail MCP service port
 ```
 
 ### Gmail MCP Authentication

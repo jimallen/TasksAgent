@@ -30,11 +30,19 @@ npm install
 # Build the project
 npm run build
 
-# Start the daemon with TUI
+# Start the daemon with TUI (default ports)
 npm run daemon
 
 # Or run in headless mode
 npm run daemon:headless
+
+# With custom ports (NEW)
+npm run daemon -- --http-port 8080 --gmail-mcp-port 9000
+npm run daemon:headless -- --http-port 8080
+
+# View configuration
+npm run daemon -- --config-dump
+npm run daemon -- --help
 ```
 
 ### Systemd Service (Linux)
@@ -93,9 +101,32 @@ sudo journalctl -u meeting-transcript-agent@$USER -f
 
 ## Configuration
 
+### Port Configuration (NEW)
+The daemon supports flexible port configuration with three priority levels:
+
+```bash
+# 1. CLI Arguments (highest priority)
+npm run daemon -- --http-port 8080 --gmail-mcp-port 9000
+
+# 2. Environment Variables (medium priority)
+HTTP_SERVER_PORT=8080 GMAIL_MCP_PORT=9000 npm run daemon
+
+# 3. Default Values (lowest priority)
+# HTTP: 3002, Gmail MCP: 3000
+```
+
+**Port Requirements:**
+- Must be between 1024-65535
+- HTTP and Gmail MCP must use different ports
+- Automatic conflict detection and suggestions
+
 ### Environment Variables
 Add to `.env` file:
 ```env
+# Port configuration (optional)
+HTTP_SERVER_PORT=3002        # HTTP API server port
+GMAIL_MCP_PORT=3000          # Gmail MCP service port
+
 # Schedule (cron format)
 SCHEDULE=0 9,13,17 * * *
 

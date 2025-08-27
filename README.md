@@ -243,8 +243,17 @@ npm run daemon
 # 🖥️ HEADLESS: For servers and background use
 npm run daemon:headless
 # - No UI, runs quietly in background
-# - HTTP API available on port 3002
+# - HTTP API available on port 3002 (default)
 # - Perfect for systemd services
+
+# ⚙️ CUSTOM PORTS: Configure network ports
+npm run daemon -- --http-port 8080                    # Custom HTTP port
+npm run daemon -- --gmail-mcp-port 9000               # Custom Gmail MCP port
+npm run daemon -- --http-port 8080 --gmail-mcp-port 9000  # Both custom
+
+# 🔍 CONFIGURATION: View active settings
+npm run daemon -- --config-dump                       # Show configuration
+npm run daemon -- --help                              # Show all options
 
 # 🧪 TESTING: Verify setup and connections
 npm run start:test
@@ -258,9 +267,32 @@ npm run dev
 # - Includes debugging output
 ```
 
+### Port Configuration
+
+The daemon supports flexible port configuration via CLI arguments or environment variables:
+
+```bash
+# CLI Arguments (highest priority)
+npm run daemon -- --http-port 8080 --gmail-mcp-port 9000
+
+# Environment Variables (medium priority)
+HTTP_SERVER_PORT=8080 GMAIL_MCP_PORT=9000 npm run daemon
+
+# Default Ports (lowest priority)
+# HTTP Server: 3002
+# Gmail MCP: 3000
+
+# Configuration Priority: CLI > Environment > Defaults
+```
+
+**Port Requirements:**
+- Ports must be between 1024-65535
+- HTTP Server and Gmail MCP must use different ports
+- Use `--config-dump` to view active configuration
+
 ### HTTP API Endpoints
 
-The unified daemon exposes all functionality via HTTP API on port 3002:
+The unified daemon exposes all functionality via HTTP API on configured port (default 3002):
 
 ```bash
 # Health and Status
