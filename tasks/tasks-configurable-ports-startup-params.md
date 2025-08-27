@@ -44,7 +44,7 @@ Generated from: `prd-configurable-ports-startup-params.md`
   - [x] 1.5 Add port suggestion utility for recommending alternatives when conflicts occur
   - [x] 1.6 Create `src/cli/portValidator.spec.ts` with comprehensive test cases for all validation scenarios
 
-- [ ] **2.0 Implement Comprehensive CLI Argument Parsing System**
+- [x] **2.0 Implement Comprehensive CLI Argument Parsing System**
   - [x] 2.1 Create `src/cli/argumentParser.ts` with support for --http-port, --gmail-mcp-port parameters
   - [x] 2.2 Add support for both --port=3000 and --port 3000 syntax formats
   - [x] 2.3 Implement --help flag with comprehensive usage information and port examples
@@ -54,14 +54,14 @@ Generated from: `prd-configurable-ports-startup-params.md`
   - [x] 2.7 Maintain compatibility with existing --headless and --help flags
   - [x] 2.8 Create `src/cli/argumentParser.spec.ts` with tests for all argument parsing scenarios
 
-- [ ] **3.0 Enhance Configuration Management with Port Priority System**
-  - [ ] 3.1 Update `src/config/config.ts` to add port configuration section with default values
-  - [ ] 3.2 Implement configuration priority system: CLI args → Environment vars → Defaults
-  - [ ] 3.3 Add configuration resolution function that merges all sources with proper precedence
-  - [ ] 3.4 Add validateConfiguration function to ensure no port conflicts and valid ranges
-  - [ ] 3.5 Add getActiveConfiguration function for --config-dump feature
-  - [ ] 3.6 Add GMAIL_MCP_PORT environment variable support alongside existing HTTP_SERVER_PORT
-  - [ ] 3.7 Update `src/config/config.spec.ts` with tests for priority resolution and validation
+- [x] **3.0 Enhance Configuration Management with Port Priority System**
+  - [x] 3.1 Update `src/config/config.ts` to add port configuration section with default values
+  - [x] 3.2 Implement configuration priority system: CLI args → Environment vars → Defaults
+  - [x] 3.3 Add configuration resolution function that merges all sources with proper precedence
+  - [x] 3.4 Add validateConfiguration function to ensure no port conflicts and valid ranges
+  - [x] 3.5 Add getActiveConfiguration function for --config-dump feature
+  - [x] 3.6 Add GMAIL_MCP_PORT environment variable support alongside existing HTTP_SERVER_PORT
+  - [x] 3.7 Update `src/config/config.spec.ts` with tests for priority resolution and validation
 
 - [ ] **4.0 Update Service Constructors and Port Configuration**
   - [ ] 4.1 Update `src/daemon/httpServer.ts` constructor to accept PortConfiguration object
