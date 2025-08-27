@@ -20,14 +20,26 @@ import { TUIInterface } from './tui/interface';
 import logger from './utils/logger';
 import { patchConsole } from './utils/consolePatch';
 
+// Module-scoped variables for lifecycle management
+let httpServer: DaemonHttpServer | null = null;
+
 async function startDaemon() {
   logger.info('Starting Meeting Transcript Agent Daemon...');
   
   const service = new DaemonService();
-  const httpServer = new DaemonHttpServer(service, 3002);
+  httpServer = new DaemonHttpServer(service, 3002);
   
   // Start HTTP server for external triggers
-  await httpServer.start();
+  try {
+    await httpServer.start();
+    // Pass httpServer reference to service for lifecycle management
+    (service as any).httpServer = httpServer;
+  } catch (error) {
+    logger.error('Failed to start HTTP server:', error);
+    logger.warn('Continuing without HTTP API - daemon will run but API endpoints will not be available');
+    // Set httpServer to null so shutdown handlers don't try to stop it
+    httpServer = null;
+  }
   
   if (command === '--headless' || command === '-h') {
     logger.info('Running in headless mode');
@@ -36,6 +48,9 @@ async function startDaemon() {
     
     process.on('SIGINT', async () => {
       logger.info('Received SIGINT, shutting down gracefully...');
+      if (httpServer) {
+        await httpServer.stop();
+      }
       await service.stop();
       service.cleanup();
       process.exit(0);
@@ -43,6 +58,9 @@ async function startDaemon() {
     
     process.on('SIGTERM', async () => {
       logger.info('Received SIGTERM, shutting down gracefully...');
+      if (httpServer) {
+        await httpServer.stop();
+      }
       await service.stop();
       service.cleanup();
       process.exit(0);
@@ -70,8 +88,15 @@ async function startDaemon() {
       await service.start();
     }
     
-    process.on('uncaughtException', (err) => {
+    process.on('uncaughtException', async (err) => {
       logger.error('Uncaught exception:', err);
+      if (httpServer) {
+        try {
+          await httpServer.stop();
+        } catch (stopError) {
+          logger.error('Error stopping HTTP server during uncaught exception:', stopError);
+        }
+      }
       service.cleanup();
       process.exit(1);
     });
