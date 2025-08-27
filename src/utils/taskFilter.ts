@@ -14,7 +14,7 @@ export interface TaskFilterOptions {
 export class TaskFilter {
   private myNames: string[];
   
-  constructor(myNames: string[] = ['Jim Allen', 'Jim', 'jimallen']) {
+  constructor(myNames: string[] = ['me']) {
     this.myNames = myNames.map(n => n.toLowerCase());
   }
 

@@ -397,6 +397,27 @@ curl http://localhost:3002/status
 1. Stop old services
 2. Update Obsidian plugin settings
 3. Start unified daemon
+
+## Recent Enhancements
+
+### Obsidian Plugin Updates (2025-08-27)
+
+#### Multi-Name Task Filtering
+- **Feature**: Support comma-separated names in "My Tasks" filter
+- **Configuration**: `dashboardMyName: "name1, name2, the group"`
+- **Behavior**: Shows tasks assigned to any of the specified names
+- **Use Case**: Team members and group assignments
+
+#### Smooth Task Completion
+- **Animation**: 0.3s fade-out and slide effect
+- **Scroll Preservation**: No page jump when completing tasks
+- **Smart Cleanup**: Empty cards and sections auto-remove
+- **Statistics**: Real-time updates without full refresh
+
+#### Security Improvements
+- **data.json**: Now gitignored for API key protection
+- **Template**: data.json.example provided for setup
+- **Defaults**: Removed hardcoded personal information
 4. Verify health endpoints
 
 ## Future Enhancements

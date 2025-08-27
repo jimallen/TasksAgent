@@ -402,12 +402,25 @@ export class TaskDashboardView extends ItemView {
       grouped[key].push(task);
     });
     
-    // Sort assignees alphabetically (user's name first if configured)
+    // Sort assignees alphabetically (user's names first if configured)
     const assignees = Object.keys(grouped).sort((a, b) => {
-      const myName = this.plugin?.settings?.dashboardMyName?.toLowerCase();
-      if (myName) {
-        if (a.toLowerCase().includes(myName)) return -1;
-        if (b.toLowerCase().includes(myName)) return 1;
+      const myNamesStr = this.plugin?.settings?.dashboardMyName?.toLowerCase();
+      if (myNamesStr) {
+        // Support comma-separated list of names
+        const myNames = myNamesStr
+          .split(',')
+          .map(name => name.trim())
+          .filter(name => name.length > 0);
+        
+        const aLower = a.toLowerCase();
+        const bLower = b.toLowerCase();
+        
+        // Check if either assignee matches any of the names
+        const aIsMe = myNames.some(name => aLower.includes(name));
+        const bIsMe = myNames.some(name => bLower.includes(name));
+        
+        if (aIsMe && !bIsMe) return -1;
+        if (bIsMe && !aIsMe) return 1;
       }
       return a.localeCompare(b);
     });
@@ -437,7 +450,7 @@ export class TaskDashboardView extends ItemView {
         });
         checkbox.checked = task.completed;
         checkbox.onclick = async () => {
-          await this.toggleTask(task, checkbox.checked);
+          await this.toggleTask(task, checkbox.checked, li);
         };
         
         // Task content wrapper
@@ -466,7 +479,7 @@ export class TaskDashboardView extends ItemView {
               editor.scrollIntoView({
                 from: { line: Math.max(0, task.line - 5), ch: 0 },
                 to: { line: Math.min(editor.lineCount() - 1, task.line + 5), ch: 0 }
-              }, true);
+              });
             }
           }
         };
@@ -574,7 +587,7 @@ export class TaskDashboardView extends ItemView {
     }
   }
 
-  private async toggleTask(task: Task, completed: boolean) {
+  private async toggleTask(task: Task, completed: boolean, listItem?: HTMLElement) {
     try {
       const content = await this.app.vault.read(task.file);
       const lines = content.split('\n');
@@ -588,8 +601,49 @@ export class TaskDashboardView extends ItemView {
       
       await this.app.vault.modify(task.file, lines.join('\n'));
       
-      // Refresh the dashboard
-      setTimeout(() => this.refresh(), 500);
+      // Update the task in our data
+      task.completed = completed;
+      
+      // If we have the list item element and task is completed, animate and remove it
+      if (listItem && completed) {
+        // Add fade-out animation
+        listItem.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+        listItem.style.opacity = '0';
+        listItem.style.transform = 'translateX(-10px)';
+        
+        // Remove the element after animation completes
+        setTimeout(() => {
+          listItem.remove();
+          
+          // Check if the card has no more tasks and remove it
+          const card = listItem.closest('.task-card') as HTMLElement;
+          if (card) {
+            const remainingTasks = card.querySelectorAll('.task-list-item');
+            if (remainingTasks.length === 0) {
+              card.style.transition = 'opacity 0.3s ease-out';
+              card.style.opacity = '0';
+              setTimeout(() => {
+                card.remove();
+                
+                // Check if the section is now empty and hide it
+                const section = card.closest('.task-section') as HTMLElement;
+                if (section) {
+                  const remainingCards = section.querySelectorAll('.task-card');
+                  if (remainingCards.length === 0) {
+                    section.style.display = 'none';
+                  }
+                }
+              }, 300);
+            }
+          }
+          
+          // Update the stats without full refresh
+          this.updateStatsOnly();
+        }, 300);
+      } else if (!completed) {
+        // If unchecking, we need to refresh to show it again
+        setTimeout(() => this.refresh(), 500);
+      }
     } catch (error) {
       console.error('Failed to toggle task:', error);
       new Notice('Failed to update task. Please try again.');
@@ -704,11 +758,18 @@ export class TaskDashboardView extends ItemView {
             if (assigneeEl && assigneeEl.textContent) {
               // Remove emoji prefix and trim
               const assignee = assigneeEl.textContent.replace(/^👤\s*/, '').trim().toLowerCase();
-              const myName = this.plugin?.settings?.dashboardMyName?.toLowerCase()?.trim();
-              if (myName) {
-                // Check for exact match or if assignee contains user's name
-                // Handle variations like "Jim Allen" matching "Jim Allen, Karishma Karnik"
-                show = assignee === myName || assignee.includes(myName);
+              const myNamesStr = this.plugin?.settings?.dashboardMyName?.toLowerCase()?.trim();
+              if (myNamesStr) {
+                // Support comma-separated list of names
+                const myNames = myNamesStr
+                  .split(',')
+                  .map(name => name.trim())
+                  .filter(name => name.length > 0);
+                
+                // Check if assignee matches any of the names
+                show = myNames.some(name => 
+                  assignee === name || assignee.includes(name)
+                );
               } else {
                 show = false;
               }
@@ -771,14 +832,57 @@ export class TaskDashboardView extends ItemView {
     return false;
   }
 
+  private updateStatsOnly() {
+    try {
+      const container = this.containerEl.children[1] as HTMLElement;
+      const statsContainer = container.querySelector('.dashboard-stats');
+      
+      if (statsContainer) {
+        // Recalculate stats from current visible tasks
+        const visibleTasks: Task[] = [];
+        const taskListItems = container.querySelectorAll('.task-list-item:not([style*="opacity: 0"])');
+        
+        // Get the count of visible tasks
+        const total = taskListItems.length;
+        const completed = container.querySelectorAll('.task-checkbox:checked').length;
+        const highPriority = container.querySelectorAll('.high-card .task-list-item:not([style*="opacity: 0"])').length;
+        
+        // Calculate overdue (this is approximate since we don't have the task data readily available)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        // Update stat values
+        const statElements = statsContainer.querySelectorAll('.stat-value');
+        if (statElements.length >= 4) {
+          statElements[0].textContent = total.toString();          // Total
+          statElements[1].textContent = completed.toString();      // Completed
+          statElements[2].textContent = highPriority.toString();   // High Priority
+          // Keep overdue as-is since we can't easily recalculate
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update stats:', error);
+    }
+  }
+
   private getFilteredTasks(): Task[] {
     if (this.showOnlyMyTasks && this.plugin?.settings?.dashboardMyName) {
-      const myName = this.plugin.settings.dashboardMyName.toLowerCase().trim();
+      // Support comma-separated list of names
+      const myNames = this.plugin.settings.dashboardMyName
+        .split(',')
+        .map(name => name.toLowerCase().trim())
+        .filter(name => name.length > 0);
+      
+      if (myNames.length === 0) {
+        return this.allTasks;
+      }
+      
       return this.allTasks.filter(t => {
         const assignee = t.assignee.toLowerCase().trim();
-        // Match exactly or if the assignee contains the user's name
-        return assignee === myName || 
-               assignee.includes(myName);
+        // Check if assignee matches any of the names
+        return myNames.some(name => 
+          assignee === name || assignee.includes(name)
+        );
       });
     }
     return this.allTasks;

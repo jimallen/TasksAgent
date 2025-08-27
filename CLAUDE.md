@@ -152,6 +152,25 @@ Edit `src/database/schema.sql`:
 4. Execute tests: `npm test`
 5. Test email processing: `npm run start:once`
 
+## Recent Updates (2025-08-27)
+
+### Obsidian Plugin Enhancements
+- **Multi-Name Task Filtering**: Support comma-separated names in "My Tasks" filter
+  - Configuration: `dashboardMyName: "name1, name2, the group"`
+  - Shows tasks assigned to any specified name
+- **Smooth Task Completion**: Tasks fade out without page refresh
+  - 0.3s animation preserves scroll position
+  - Empty cards/sections auto-remove
+- **Security Improvements**: 
+  - `obsidian-plugin/data.json` now gitignored
+  - `data.json.example` template provided
+  - Removed hardcoded defaults from `taskFilter.ts`
+
+### CEL Board Meeting Processing Fix
+- Issue: Empty meeting notes despite email content
+- Solution: Clear database entry and reprocess
+- Result: Successfully extracted 10 tasks with 85% confidence
+
 ## Troubleshooting Guide
 
 ### Gmail Not Finding Emails

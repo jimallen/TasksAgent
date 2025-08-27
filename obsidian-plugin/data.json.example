@@ -1,0 +1,17 @@
+{
+  "lookbackHours": 120,
+  "debugMode": false,
+  "mcpServerUrl": "http://localhost:3002/gmail",
+  "anthropicApiKey": "",
+  "notesFolder": "Meetings",
+  "claudeModel": "claude-3-5-haiku-20241022",
+  "dashboardShowOnlyMyTasks": false,
+  "dashboardMyName": "",
+  "meetingPlatforms": {
+    "googleMeet": true,
+    "zoom": true,
+    "teams": false,
+    "genericMeeting": true
+  },
+  "processedEmails": []
+}

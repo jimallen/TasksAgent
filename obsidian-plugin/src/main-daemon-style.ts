@@ -1051,10 +1051,10 @@ class MeetingTasksSettingTab extends PluginSettingTab {
         }));
     
     new Setting(containerEl)
-      .setName('My name')
-      .setDesc('Your name for filtering tasks (e.g., "John", "Sarah")')
+      .setName('My name(s)')
+      .setDesc('Your name(s) for filtering tasks. Use comma-separated list for multiple names (e.g., "Jim, the group" or "Sarah, team")')
       .addText(text => text
-        .setPlaceholder('Your name')
+        .setPlaceholder('Your name, other name')
         .setValue(this.plugin.settings.dashboardMyName)
         .onChange(async (value) => {
           this.plugin.settings.dashboardMyName = value;

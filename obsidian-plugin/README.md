@@ -13,6 +13,8 @@ Automatically import meeting tasks and notes from email transcripts using AI-pow
 - 🤖 **AI-Powered Task Extraction**: Uses Claude AI to intelligently extract tasks, decisions, and action items from meeting transcripts
 - 📧 **Gmail Integration**: Automatically finds and processes meeting emails via the TasksAgent service
 - 📝 **Smart Note Creation**: Creates well-structured meeting notes with participants, tasks, decisions, and next steps
+- 👥 **Multi-Name Task Filtering** (NEW): Support comma-separated names for "My Tasks" (e.g., "Alice, team, the group")
+- ✨ **Smooth Task Completion** (NEW): Fade-out animation preserves scroll position when completing tasks
 - 🔄 **Real-time Updates**: WebSocket support for instant notifications when new meetings are processed
 - 🎨 **Templater Integration**: Full support for custom templates using the Templater plugin
 - ⏰ **Automatic Scheduling**: Configure automatic checks at custom intervals with quiet hours support

@@ -31,6 +31,12 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 - ⚡ **Rate Limiting**: Respects Gmail API quotas with intelligent rate limiting
 - 🎯 **Priority Management**: Categorizes tasks by priority and assigns due dates
 
+### Obsidian Plugin Features (NEW)
+- 👥 **Multi-Name Filtering**: Support comma-separated names for "My Tasks" (e.g., "Alice, team, the group")
+- ✨ **Smooth Task Completion**: Fade-out animation preserves scroll position
+- 📊 **Real-time Statistics**: Updates without page refresh
+- 🔒 **Secure Configuration**: API keys stored locally, gitignored for safety
+
 ### NEW: Unified Daemon Service
 - 🖥️ **Single Service Architecture**: One command starts everything including Gmail MCP
 - 📊 **Live Statistics**: Track emails processed, tasks extracted, and success rates  

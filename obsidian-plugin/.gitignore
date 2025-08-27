@@ -1,0 +1,23 @@
+# User-specific data
+data.json
+
+# Build output (main.js is needed for distribution)
+# main.js is tracked in git for easy plugin installation
+
+# Node modules
+node_modules/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*~
+*.bak
