@@ -10,7 +10,7 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 ## 📚 Documentation
 
 - [System Architecture](docs/system-architecture.md) - Detailed system design with mermaid diagrams
-- [HTTP Server Architecture](docs/ARCHITECTURE_HTTP_SERVERS.md) - Why two HTTP servers are needed
+- [Unified Daemon Architecture](docs/ARCHITECTURE_UNIFIED_DAEMON.md) - **NEW**: Single service architecture with integrated Gmail MCP
 - [Daemon Service Guide](docs/daemon-service.md) - Background service with TUI monitoring
 - [API Reference](docs/api-reference.md) - Complete API documentation
 - [Gmail Setup Guide](docs/GMAIL_SETUP.md) - Detailed Gmail MCP configuration
@@ -31,14 +31,15 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 - ⚡ **Rate Limiting**: Respects Gmail API quotas with intelligent rate limiting
 - 🎯 **Priority Management**: Categorizes tasks by priority and assigns due dates
 
-### NEW: Daemon Service with TUI
-- 🖥️ **Terminal User Interface**: Real-time monitoring dashboard with statistics
-- 📊 **Live Statistics**: Track emails processed, tasks extracted, and success rates
-- ⚙️ **Manual Control**: Start/stop service and trigger processing on-demand
+### NEW: Unified Daemon Service
+- 🖥️ **Single Service Architecture**: One command starts everything including Gmail MCP
+- 📊 **Live Statistics**: Track emails processed, tasks extracted, and success rates  
+- ⚙️ **Manual Control**: HTTP API for triggering processing and monitoring
 - 📈 **Performance Metrics**: Monitor uptime, error rates, and processing history
-- 🔧 **Configuration Editor**: Edit settings without leaving the TUI
+- 🔧 **TUI Dashboard**: Optional terminal interface for real-time monitoring
 - 📜 **Activity Log**: Real-time log viewer with color-coded messages
 - 💾 **Persistent Stats**: SQLite database for historical metrics
+- 🔄 **Auto-Recovery**: Gmail MCP crashes are automatically handled with restart logic
 
 ## 📋 Prerequisites
 
@@ -88,9 +89,9 @@ NOTIFICATION_CHANNELS=console,desktop
 TZ=America/New_York
 ```
 
-### 3. Setup Gmail MCP Server
+### 3. Setup Gmail Authentication
 
-The agent uses the Gmail MCP (Model Context Protocol) server for Gmail integration. You'll need to set up Google Cloud OAuth credentials first.
+The unified daemon includes integrated Gmail MCP for seamless Gmail access. You'll need to set up Google Cloud OAuth credentials first.
 
 #### Step 1: Create Google Cloud OAuth Credentials
 
@@ -210,51 +211,79 @@ kill -9 <PID>
 - Make sure you selected "Desktop app" when creating OAuth client
 - Not "Web application" or other types
 
-### 4. Initialize the Agent
+### 4. Initialize and Start the Agent
 
 ```bash
-# Run initial setup and test
+# Run initial setup and verify connections
 npm run start:test
 
-# Start the agent (classic mode)
-npm start
+# Start unified daemon (recommended) - includes Gmail MCP
+npm run daemon           # With TUI dashboard
+# OR
+npm run daemon:headless  # For servers/background
 
-# NEW: Start as daemon with TUI interface
-npm run daemon
+# Run once and exit (for testing)
+npm run start:once
 ```
 
 ## Usage
 
 ### Running Modes
 
+The unified daemon provides a single-service architecture with integrated Gmail MCP:
+
 ```bash
-# Start with scheduled processing (classic)
-npm start
-
-# NEW: Daemon with Terminal UI (recommended)
+# 🎯 RECOMMENDED: Unified daemon with TUI
 npm run daemon
+# - Single command starts everything
+# - Real-time dashboard with statistics  
+# - Manual processing controls
+# - Gmail MCP automatically managed
 
-# Daemon in headless mode (for servers)
+# 🖥️ HEADLESS: For servers and background use
 npm run daemon:headless
+# - No UI, runs quietly in background
+# - HTTP API available on port 3002
+# - Perfect for systemd services
 
-# Run once and exit
-npm run start:once
-
-# Test mode - verify all connections
+# 🧪 TESTING: Verify setup and connections
 npm run start:test
+# - Tests Gmail authentication
+# - Verifies Obsidian vault access
+# - Checks Claude API connection
 
-# Development mode with auto-reload
+# 🔧 DEVELOPMENT: With auto-reload
 npm run dev
+# - Restarts on file changes
+# - Includes debugging output
 ```
 
-### Daemon Service with TUI
+### HTTP API Endpoints
 
-The new daemon service provides a terminal-based dashboard for monitoring:
+The unified daemon exposes all functionality via HTTP API on port 3002:
 
 ```bash
-# Start daemon with TUI
-npm run daemon
+# Health and Status
+curl http://localhost:3002/health        # Overall health
+curl http://localhost:3002/status        # Detailed statistics
+curl http://localhost:3002/gmail/health  # Gmail MCP status
 
+# Manual Processing
+curl -X POST http://localhost:3002/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"source": "manual"}'
+
+# Gmail Operations (via Obsidian Plugin)
+curl -X POST http://localhost:3002/gmail/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "subject:meeting", "maxResults": 10}'
+```
+
+### TUI Dashboard Controls
+
+When running with `npm run daemon`, the terminal interface provides:
+
+```bash
 # TUI Controls:
 # F1 - Start service
 # F2 - Stop service  
@@ -263,21 +292,33 @@ npm run daemon
 # F5 - View logs
 # F6 - Edit configuration
 # Q  - Quit TUI
+```
 
+### System Service Installation
+
+```bash
 # Install as systemd service (Linux)
 sudo npm run daemon:install
 sudo systemctl start meeting-transcript-agent@$USER
+sudo systemctl enable meeting-transcript-agent@$USER
 ```
 
 See [Daemon Service Documentation](docs/daemon-service.md) for details.
 
 ### Manual Processing
 
-You can trigger processing manually while the agent is running:
+You can trigger processing manually via the HTTP API:
 
 ```bash
-# In another terminal
-curl http://localhost:3000/trigger
+# Trigger processing with default settings
+curl -X POST http://localhost:3002/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"source": "manual"}'
+
+# Trigger with custom lookback period
+curl -X POST http://localhost:3002/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"source": "manual", "hoursBack": 48}'
 ```
 
 ## Project Structure

@@ -16,7 +16,7 @@ graph TB
     end
     
     subgraph "External Services"
-        F[Gmail MCP Server<br/>Port 3001] --> G[Gmail API]
+        F[Unified Daemon<br/>Port 3002<br/>with Gmail MCP] --> G[Gmail API]
         H[Claude API<br/>Anthropic]
     end
     
@@ -67,7 +67,7 @@ graph TB
   - `searchEmails()`: Searches for emails using Gmail query syntax
   - `getEmailContent()`: Retrieves full email content
   - `fetchRecentMeetingEmails()`: Finds meeting-related emails
-- **Communication**: HTTP requests to localhost:3001
+- **Communication**: HTTP requests to localhost:3002/gmail
 
 #### 3. Claude Task Extractor (`ClaudeTaskExtractor`)
 - **Purpose**: Intelligent task extraction using Claude AI
@@ -104,7 +104,7 @@ graph TB
 ### External Dependencies
 
 #### Gmail MCP Server
-- **Location**: `http://localhost:3001`
+- **Location**: `http://localhost:3002/gmail` (unified daemon)
 - **Purpose**: Provides OAuth-authenticated Gmail access
 - **Protocol**: MCP (Model Context Protocol)
 - **Wrapper**: HTTP bridge for Obsidian compatibility
@@ -208,7 +208,7 @@ Brief meeting summary
 1. **Gmail MCP Server**
    ```bash
    npm install -g @gongrzhe/server-gmail-autoauth-mcp
-   npm run gmail-mcp-http  # Start HTTP wrapper on port 3001
+   npm run daemon  # Start unified daemon with Gmail MCP on port 3002
    ```
 
 2. **Claude API Key**

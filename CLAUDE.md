@@ -23,34 +23,40 @@ npm run test:coverage  # Test coverage report
 npm run start:test     # Test mode - verify all connections
 npm run start:once     # Process emails once and exit
 npm start              # Classic scheduler mode (9 AM, 1 PM, 5 PM)
-npm run daemon         # Daemon with TUI dashboard (recommended)
-npm run daemon:headless # Daemon without UI (for servers)
-
-# Starting both services (Gmail MCP + Daemon)
-./start-all.sh         # Starts both services in background
-./stop-all.sh          # Stops both services
+npm run daemon         # Daemon with TUI dashboard - includes Gmail MCP (recommended)
+npm run daemon:headless # Daemon without UI - includes Gmail MCP (for servers)
 ```
 
 ### Gmail MCP Setup
 ```bash
-npx @gongrzhe/server-gmail-autoauth-mcp  # Authenticate Gmail MCP
+npx @gongrzhe/server-gmail-autoauth-mcp  # Authenticate Gmail MCP (one-time setup)
 ```
 **Full setup guide**: See [docs/GMAIL_SETUP.md](docs/GMAIL_SETUP.md) for detailed OAuth configuration
 
+**Note**: Gmail MCP is now integrated into the daemon. No separate service needed!
+
 ## Architecture Overview
 
-### Processing Flow
-1. **Gmail MCP Server** (`src/services/gmailService.ts`) - OAuth-based email fetching via external MCP process
-2. **Email Parser** (`src/parsers/emailParser.ts`) - Identifies meeting transcripts by patterns
-3. **Claude AI Extractor** (`src/extractors/claudeTaskExtractor.ts`) - Extracts tasks using Anthropic API
-4. **Obsidian Service** (`src/services/obsidianService.ts`) - Creates structured notes in vault
-5. **State Manager** (`src/database/stateManager.ts`) - SQLite-based deduplication
-6. **Notification Service** (`src/services/notificationService.ts`) - Multi-channel alerts
+### Unified Daemon Architecture (NEW)
+The system now uses a single unified daemon with integrated Gmail MCP:
 
-### HTTP Server Architecture
-- **Port 3000**: Gmail MCP HTTP wrapper (`scripts/gmail-mcp-http.js`) - Bridges stdio-based MCP to HTTP
-- **Port 3002**: Daemon HTTP API (`src/daemon/httpServer.ts`) - Control interface for daemon service
-- **Why Two Servers**: See [HTTP Server Architecture](docs/ARCHITECTURE_HTTP_SERVERS.md) for detailed explanation
+1. **Unified Daemon** (`src/daemon.ts`) - Main entry point and service coordinator
+2. **Gmail MCP Service** (`src/daemon/gmailMcpService.ts`) - Child process manager for Gmail MCP
+3. **HTTP Server** (`src/daemon/httpServer.ts`) - All endpoints on port 3002
+4. **Email Processing Pipeline**:
+   - **GmailService** (`src/services/gmailService.ts`) - Connects to daemon's Gmail endpoints
+   - **Email Parser** (`src/parsers/emailParser.ts`) - Identifies meeting transcripts
+   - **Claude AI Extractor** (`src/extractors/claudeTaskExtractor.ts`) - AI task extraction
+   - **Obsidian Service** (`src/services/obsidianService.ts`) - Creates notes in vault
+5. **State Manager** (`src/database/stateManager.ts`) - SQLite deduplication and stats
+6. **TUI Interface** (`src/tui/interface.ts`) - Optional terminal dashboard
+
+### Daemon Service Endpoints
+- **Port 3002**: Unified HTTP API with integrated Gmail MCP
+  - `/health`, `/status`, `/trigger` - Daemon control endpoints
+  - `/gmail/*` - Gmail MCP proxy endpoints (integrated)
+- **Gmail MCP**: Now runs as managed child process within daemon
+- **Single Service**: `npm run daemon` starts everything
 
 ### Daemon Service Architecture
 - `src/daemon.ts` - Entry point with TUI/headless mode detection

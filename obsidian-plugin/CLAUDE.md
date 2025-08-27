@@ -25,7 +25,7 @@
 
 ### For Users
 1. Install plugin in Obsidian
-2. Start Gmail MCP server: `npm run gmail-mcp-http`
+2. Start unified daemon: `npm run daemon` (includes Gmail MCP)
 3. Configure settings (API keys, folders)
 4. Click ribbon icon or use command palette to process emails
 
@@ -41,8 +41,8 @@ node esbuild.config.js production
 # Deploy to vault
 cp main.js "/path/to/vault/.obsidian/plugins/meeting-tasks/main.js"
 
-# Start Gmail MCP HTTP wrapper (required)
-npm run gmail-mcp-http
+# Start unified daemon (includes Gmail MCP)
+npm run daemon
 ```
 
 ## Key Files
@@ -60,7 +60,7 @@ npm run gmail-mcp-http
 - `styles/dashboard.css` - Dashboard-specific styles
 
 ### Scripts
-- `scripts/start-gmail-mcp-http.js` - HTTP wrapper for Gmail MCP
+- Daemon now includes Gmail MCP - no separate wrapper needed
 
 ## Features
 
@@ -111,7 +111,7 @@ npm run gmail-mcp-http
 {
   // Email Processing
   lookbackHours: 120,              // How far back to search
-  mcpServerUrl: "http://localhost:3001",
+  mcpServerUrl: "http://localhost:3002/gmail",  // Unified daemon endpoint
   
   // Claude AI
   anthropicApiKey: "sk-ant-...",   // Your API key
@@ -135,11 +135,11 @@ npm run gmail-mcp-http
 
 ### Gmail MCP Not Connecting
 ```bash
-# Start the HTTP wrapper
-npm run gmail-mcp-http
+# Start the unified daemon (includes Gmail MCP)
+npm run daemon
 
 # Check if running
-curl http://localhost:3001/health
+curl http://localhost:3002/gmail/health
 ```
 
 ### Tasks Not Extracting
@@ -274,4 +274,4 @@ node build.js
 - Check plugin settings for API connection status
 - Review created notes for extraction quality
 - Use fallback mode to test without Claude API
-- Check localhost:3001 for Gmail MCP status
+- Check localhost:3002/gmail/health for Gmail MCP status
