@@ -222,7 +222,7 @@ export class MeetingTranscriptAgent {
           logDebug(`Email "${email.subject}" identified as ${parsed.service} transcript (${parsed.confidence}% confidence)`);
         }
       } catch (error) {
-        logWarn(`Failed to parse email ${email.id}`, error as any);
+        logWarn(`Failed to parse email ${email.id}`, error as Error);
       }
     }
 

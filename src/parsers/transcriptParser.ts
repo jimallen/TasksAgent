@@ -535,7 +535,7 @@ export class TranscriptParser {
         }
       }
     } catch (error) {
-      logWarn('Failed to cleanup temp files', error as any);
+      logWarn('Failed to cleanup temp files', error as Error);
     }
   }
 }

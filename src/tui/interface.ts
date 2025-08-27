@@ -109,7 +109,7 @@ export class TUIInterface {
       },
     });
     
-    (blessed as any).listbar({
+    (blessed as unknown as { listbar: (options: any) => any }).listbar({
       parent: this.screen,
       bottom: 0,
       left: 0,

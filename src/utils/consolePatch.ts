@@ -1,7 +1,7 @@
 /**
  * Patch console methods to prevent output in TUI mode
  */
-export function patchConsole(): void {
+export function patchConsole(): { restore: () => void } | void {
   if (!process.env['TUI_MODE']) {
     return;
   }
@@ -42,5 +42,5 @@ export function patchConsole(): void {
       console.debug = originalConsole.debug;
       process.stderr.write = originalStderrWrite;
     }
-  } as any;
+  };
 }

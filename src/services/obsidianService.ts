@@ -530,7 +530,7 @@ export class ObsidianService {
         }
       }
     } catch (error) {
-      logWarn(`Failed to read directory: ${dir}`, error as any);
+      logWarn(`Failed to read directory: ${dir}`, error as Error);
     }
     
     return files;
@@ -621,7 +621,7 @@ tags:
         logDebug(`Linked meeting to daily note: ${date.toISOString().split('T')[0]}`);
       }
     } catch (error) {
-      logWarn('Failed to link to daily note', error as any);
+      logWarn('Failed to link to daily note', error as Error);
     }
   }
 

@@ -4,6 +4,12 @@ import { logInfo, logError, logDebug, logWarn } from '../utils/logger';
 import { config } from '../config/config';
 import { getDateRangeForEmailCheck } from '../utils/dateFormatter';
 
+interface ToolCallResult {
+  content?: unknown[];
+  isError?: boolean;
+  error?: string;
+}
+
 export interface EmailMessage {
   id: string;
   threadId: string;
@@ -178,12 +184,12 @@ export class GmailService {
           query: searchQuery,
           maxResults: 50,
         }
-      }) as any;
+      }) as unknown as ToolCallResult;
 
       // Log the result to debug
       logDebug('Search result:', result);
 
-      if (!result.content || (result.content as any[]).length === 0) {
+      if (!result.content || (result.content as unknown[]).length === 0) {
         logInfo('No emails found matching the search criteria');
         return [];
       }
@@ -194,8 +200,8 @@ export class GmailService {
       // Gmail MCP returns results as text in this format:
       // ID: xxx\nSubject: xxx\nFrom: xxx\nDate: xxx\n\n
       let textContent = '';
-      if (Array.isArray(result.content) && result.content[0]?.text !== undefined) {
-        textContent = result.content[0].text;
+      if (Array.isArray(result.content) && result.content[0] && typeof result.content[0] === 'object' && 'text' in result.content[0]) {
+        textContent = (result.content[0] as { text: string }).text;
       } else if (typeof result.content === 'string') {
         textContent = result.content;
       } else {
@@ -309,17 +315,17 @@ export class GmailService {
         arguments: {
           messageId: emailId,  // read_email takes a single messageId, not an array
         }
-      }) as any;
+      }) as unknown as ToolCallResult;
 
-      if (!result.content || (result.content as any[]).length === 0) {
+      if (!result.content || (result.content as unknown[]).length === 0) {
         logWarn(`Email ${emailId} not found`);
         return null;
       }
 
       // Parse the email content - Gmail MCP returns full email details
       let emailContent = '';
-      if (Array.isArray(result.content) && result.content[0]?.text) {
-        emailContent = result.content[0].text;
+      if (Array.isArray(result.content) && result.content[0] && typeof result.content[0] === 'object' && 'text' in result.content[0]) {
+        emailContent = (result.content[0] as { text: string }).text;
       } else if (typeof result.content === 'string') {
         emailContent = result.content;
       }
@@ -376,12 +382,16 @@ export class GmailService {
         }
       });
 
-      if (!result.content || (result.content as any).length === 0) {
+      if (!result.content || (result.content as unknown[]).length === 0) {
         throw new Error('No attachment data received');
       }
 
       // The attachment data should be base64 encoded
-      const attachmentData = (result.content as any)[0].text;
+      const attachmentData = (result.content as Array<{ text: string }>)[0]?.text;
+      if (!attachmentData) {
+        logWarn('No attachment data found');
+        throw new Error('No attachment data found');
+      }
       const buffer = Buffer.from(attachmentData, 'base64');
 
       logDebug(`Downloaded attachment: ${buffer.length} bytes`);

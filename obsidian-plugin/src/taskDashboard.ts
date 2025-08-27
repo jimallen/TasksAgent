@@ -459,7 +459,7 @@ export class TaskDashboardView extends ItemView {
           // Scroll to the task line if possible
           const view = leaf.view;
           if (view && 'editor' in view) {
-            const editor = (view as any).editor;
+            const editor = (view as { editor?: CodeMirror.Editor }).editor;
             if (editor) {
               // Set cursor to the task line
               editor.setCursor(task.line, 0);

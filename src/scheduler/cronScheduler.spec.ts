@@ -431,7 +431,7 @@ describe('CronScheduler', () => {
       
       // Find and trigger the morning job
       const jobs = scheduler.getJobStatus();
-      const morningJob = (jobs as any[]).find(j => j.id === 'morning');
+      const morningJob = (jobs as unknown as Array<{ id: string }>).find(j => j.id === 'morning');
       
       if (morningJob) {
         await scheduler.triggerJob('morning');
@@ -448,7 +448,7 @@ describe('CronScheduler', () => {
       await scheduler.start();
       
       const jobs = scheduler.getJobStatus();
-      const morningJob = (jobs as any[]).find(j => j.id === 'morning');
+      const morningJob = (jobs as unknown as Array<{ id: string }>).find(j => j.id === 'morning');
       
       if (morningJob) {
         await scheduler.triggerJob('morning');

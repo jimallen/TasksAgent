@@ -2,6 +2,12 @@ import { GmailService, GmailSearchQuery } from './gmailService';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
+interface ToolCallResult {
+  content?: unknown[];
+  isError?: boolean;
+  error?: string;
+}
+
 // Mock the MCP SDK
 jest.mock('@modelcontextprotocol/sdk/client/index.js');
 jest.mock('@modelcontextprotocol/sdk/client/stdio.js');
@@ -39,9 +45,9 @@ describe('GmailService', () => {
       connect: jest.fn().mockResolvedValue(undefined),
       close: jest.fn().mockResolvedValue(undefined),
       callTool: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<Client>;
 
-    mockTransport = {} as any;
+    mockTransport = {} as unknown as StdioClientTransport;
 
     (Client as jest.MockedClass<typeof Client>).mockImplementation(() => mockClient);
     (StdioClientTransport as jest.MockedClass<typeof StdioClientTransport>).mockImplementation(
@@ -115,7 +121,7 @@ describe('GmailService', () => {
 
       mockClient.callTool.mockResolvedValue({
         content: [{ text: JSON.stringify(mockEmailData) }],
-      } as any);
+      } as ToolCallResult);
 
       const emails = await gmailService.searchEmails(query);
 
@@ -132,7 +138,7 @@ describe('GmailService', () => {
     it('should return empty array when no emails found', async () => {
       mockClient.callTool.mockResolvedValue({
         content: [],
-      } as any);
+      } as ToolCallResult);
 
       const emails = await gmailService.searchEmails({ from: '@test.com' });
 
@@ -158,7 +164,7 @@ describe('GmailService', () => {
 
       mockClient.callTool.mockResolvedValue({
         content: [{ text: JSON.stringify(mockEmailData) }],
-      } as any);
+      } as ToolCallResult);
 
       const emails = await gmailService.fetchRecentEmails(8);
 
@@ -183,7 +189,7 @@ describe('GmailService', () => {
       // Return same email for multiple queries
       mockClient.callTool.mockResolvedValue({
         content: [{ text: JSON.stringify(mockEmailData) }],
-      } as any);
+      } as ToolCallResult);
 
       const emails = await gmailService.fetchRecentEmails();
 
@@ -206,7 +212,7 @@ describe('GmailService', () => {
 
       mockClient.callTool.mockResolvedValue({
         content: [{ text: JSON.stringify(mockEmailData) }],
-      } as any);
+      } as ToolCallResult);
 
       const email = await gmailService.readEmail('email1');
 
@@ -220,7 +226,7 @@ describe('GmailService', () => {
     it('should return null when email not found', async () => {
       mockClient.callTool.mockResolvedValue({
         content: [],
-      } as any);
+      } as ToolCallResult);
 
       const email = await gmailService.readEmail('nonexistent');
 
@@ -235,7 +241,7 @@ describe('GmailService', () => {
 
       mockClient.callTool.mockResolvedValue({
         content: [{ text: base64Data }],
-      } as any);
+      } as ToolCallResult);
 
       const buffer = await gmailService.downloadAttachment('email1', 'attach1');
 
@@ -249,7 +255,7 @@ describe('GmailService', () => {
     it('should throw error when no attachment data', async () => {
       mockClient.callTool.mockResolvedValue({
         content: [],
-      } as any);
+      } as ToolCallResult);
 
       await expect(
         gmailService.downloadAttachment('email1', 'attach1')
@@ -259,7 +265,7 @@ describe('GmailService', () => {
 
   describe('markAsRead', () => {
     it('should mark email as read', async () => {
-      mockClient.callTool.mockResolvedValue({} as any);
+      mockClient.callTool.mockResolvedValue({} as ToolCallResult);
 
       await gmailService.markAsRead('email1');
 
@@ -272,7 +278,7 @@ describe('GmailService', () => {
 
   describe('addLabel', () => {
     it('should add label to email', async () => {
-      mockClient.callTool.mockResolvedValue({} as any);
+      mockClient.callTool.mockResolvedValue({} as ToolCallResult);
 
       await gmailService.addLabel('email1', 'PROCESSED');
 

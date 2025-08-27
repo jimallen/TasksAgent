@@ -242,7 +242,7 @@ export class StateManager {
         const hash = this.generateTaskHash(task);
         
         // Check for duplicate
-        const existing = this.preparedStatements.get('getTaskByHash')!.get(hash) as any;
+        const existing = this.preparedStatements.get('getTaskByHash')!.get(hash) as { id: number } | undefined;
         if (existing && typeof existing === 'object' && 'id' in existing) {
           logDebug(`Duplicate task found: ${task.description}`);
           this.recordSimilarTask(existing.id, existing.id, 1.0);
@@ -351,7 +351,7 @@ export class StateManager {
       );
       stmt.run(taskId, similarId, score);
     } catch (error) {
-      logWarn('Failed to record similar task', error as any);
+      logWarn('Failed to record similar task', error as Error);
     }
   }
 
@@ -580,7 +580,7 @@ export class StateManager {
    */
   getConfig(key: string): string | null {
     const stmt = this.db.prepare('SELECT value FROM state_config WHERE key = ?');
-    const result = stmt.get(key) as any;
+    const result = stmt.get(key) as { value: string } | undefined;
     return result ? result.value : null;
   }
 
