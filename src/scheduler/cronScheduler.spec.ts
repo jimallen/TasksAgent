@@ -359,7 +359,7 @@ describe('CronScheduler', () => {
       const health = scheduler.getHealthStatus();
       
       expect(health.healthy).toBe(false);
-      expect(health.issues.some(i => i.includes('hasn\'t run in'))).toBe(true);
+      expect(health.issues.some((i: string) => i.includes('hasn\'t run in'))).toBe(true);
     });
   });
 

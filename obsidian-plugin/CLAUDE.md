@@ -237,7 +237,21 @@ node build.js
 - Configurable dashboard filtering
 - Ready for Obsidian Community Plugins
 
-## Recent Changes (Latest Session)
+## Recent Changes (Latest Session - 2025-08-29)
+
+### Filter Button Count Badges
+- Added real-time count badges to all filter buttons
+- Badges show total count regardless of active filter
+- Counts update with 150ms debouncing for performance
+- Zero counts hide badges automatically
+- Color-coded badges match filter types
+- Support for "Past Due" filter with overdue task counting
+
+### Dashboard UI Simplification
+- **Removed redundant stats cards** at top of dashboard
+- Metrics now integrated directly into filter buttons
+- Cleaner interface with less visual redundancy
+- Improved information density
 
 ### Dashboard UI Improvements
 - Fixed edit button placement - now in top-left corner of each task item
@@ -252,12 +266,15 @@ node build.js
 - Added support for daily notes and all markdown files
 - Improved "My Tasks" filtering logic
 - Added toggle button for My Tasks/All Tasks views
+- Support for comma-separated names in "My Tasks" filter
 
-### Code Quality
+### Code Quality & Testing
 - Removed debug borders and unnecessary styles
 - Consolidated CSS files (dashboard.css merged into styles.css)
 - Improved DOM structure for better performance
 - Enhanced TypeScript typing throughout
+- Fixed all TypeScript compilation errors in test suite
+- Updated test mocks for GmailMcpService integration
 
 ## Future Enhancements
 - [ ] Real-time email monitoring

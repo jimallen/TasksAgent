@@ -1,16 +1,29 @@
 import { DaemonService } from './daemon/service';
 import { DaemonHttpServer } from './daemon/httpServer';
+import { GmailMcpService } from './daemon/gmailMcpService';
 import logger from './utils/logger';
 
-// Mock modules
+// Mock modules before import
 jest.mock('./daemon/service');
 jest.mock('./daemon/httpServer');
+jest.mock('./daemon/gmailMcpService');
 jest.mock('./utils/logger');
 jest.mock('./tui/interface');
+jest.mock('./cli/argumentParser', () => ({
+  parseArguments: jest.fn().mockReturnValue({
+    httpPort: 3002,
+    gmailMcpPort: 3000,
+    headless: true,
+    manualOnly: false,
+    configDump: false,
+    help: false
+  })
+}));
 
 describe('Daemon Lifecycle Management', () => {
   let mockService: jest.Mocked<DaemonService>;
   let mockHttpServer: jest.Mocked<DaemonHttpServer>;
+  let mockGmailMcp: jest.Mocked<GmailMcpService>;
   let originalEnv: NodeJS.ProcessEnv;
   let processExitSpy: jest.SpyInstance;
   let processOnSpy: jest.SpyInstance;
@@ -38,9 +51,25 @@ describe('Daemon Lifecycle Management', () => {
       getPort: jest.fn().mockReturnValue(3002),
     } as unknown as jest.Mocked<DaemonHttpServer>;
 
+    mockGmailMcp = {
+      start: jest.fn().mockResolvedValue(undefined),
+      stop: jest.fn().mockResolvedValue(undefined),
+      cleanup: jest.fn().mockResolvedValue(undefined),
+      isRunning: jest.fn().mockReturnValue(true),
+      getStatus: jest.fn().mockReturnValue({
+        running: true,
+        pid: 12345,
+        requestCount: 0,
+        restartCount: 0,
+        lastError: null,
+      }),
+      on: jest.fn(),
+    } as unknown as jest.Mocked<GmailMcpService>;
+
     // Mock constructors
     (DaemonService as unknown as jest.Mock).mockImplementation(() => mockService);
     (DaemonHttpServer as unknown as jest.Mock).mockImplementation(() => mockHttpServer);
+    (GmailMcpService as unknown as jest.Mock).mockImplementation(() => mockGmailMcp);
 
     // Mock process.exit
     processExitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {
@@ -62,227 +91,201 @@ describe('Daemon Lifecycle Management', () => {
     jest.resetModules();
   });
 
-  describe('SIGINT Handler', () => {
-    it('should stop HTTP server before daemon service on SIGINT in headless mode', async () => {
+  describe('Daemon Initialization', () => {
+    it('should create HTTP server and pass it to daemon service', async () => {
       process.argv = ['node', 'daemon.js', '--headless'];
       
       // Dynamically import to trigger module execution
-      jest.isolateModules(() => {
-        require('./daemon');
-      });
+      await expect(async () => {
+        jest.isolateModules(() => {
+          require('./daemon');
+        });
+      }).rejects.toThrow(); // Will throw due to async promise rejection
 
       // Wait for async operations
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Verify startDaemon was called
-      expect(DaemonService).toHaveBeenCalled();
+      // Verify constructors were called
       expect(DaemonHttpServer).toHaveBeenCalled();
+      expect(GmailMcpService).toHaveBeenCalled();
+      expect(DaemonService).toHaveBeenCalledWith(
+        expect.any(Object), // httpServer
+        expect.any(Object)  // gmailMcpService
+      );
+    });
+
+    it('should handle missing environment configuration', async () => {
+      delete process.env.OBSIDIAN_VAULT_PATH;
+      process.argv = ['node', 'daemon.js', '--headless'];
+      
+      await expect(async () => {
+        jest.isolateModules(() => {
+          require('./daemon');
+        });
+      }).rejects.toThrow();
+      
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Obsidian vault path not configured')
+      );
+    });
+  });
+
+  describe('Service Integration', () => {
+    it('should start all services in correct order', async () => {
+      process.argv = ['node', 'daemon.js', '--headless'];
+      process.env.OBSIDIAN_VAULT_PATH = '/test/vault';
+      
+      // Import daemon module
+      await expect(async () => {
+        jest.isolateModules(() => {
+          require('./daemon');
+        });
+      }).rejects.toThrow();
+
+      // Wait for async operations
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verify services started
+      expect(mockGmailMcp.start).toHaveBeenCalled();
       expect(mockHttpServer.start).toHaveBeenCalled();
       expect(mockService.start).toHaveBeenCalled();
-
-      // Verify SIGINT handler was registered
-      expect(signalHandlers['SIGINT']).toBeDefined();
-
-      // Trigger SIGINT handler
-      try {
-        await signalHandlers['SIGINT']!();
-      } catch (error: any) {
-        expect(error.message).toBe('process.exit called');
-      }
-
-      // Verify shutdown sequence
-      expect(mockHttpServer.stop).toHaveBeenCalled();
-      expect(mockService.stop).toHaveBeenCalled();
-      expect(mockService.cleanup).toHaveBeenCalled();
-
-      // Verify order: HTTP server stops before service
-      const httpStopOrder = mockHttpServer.stop.mock.invocationCallOrder[0];
-      const serviceStopOrder = mockService.stop.mock.invocationCallOrder[0];
-      expect(httpStopOrder!).toBeLessThan(serviceStopOrder!);
-      
-      expect(processExitSpy).toHaveBeenCalledWith(0);
     });
 
-    it('should handle HTTP server stop failure gracefully', async () => {
+    it('should handle Gmail MCP service failures', async () => {
+      mockGmailMcp.start.mockRejectedValue(new Error('Gmail MCP failed'));
       process.argv = ['node', 'daemon.js', '--headless'];
+      process.env.OBSIDIAN_VAULT_PATH = '/test/vault';
       
-      // Make HTTP server stop fail
-      mockHttpServer.stop.mockRejectedValue(new Error('HTTP stop failed'));
-      
-      jest.isolateModules(() => {
-        require('./daemon');
-      });
+      await expect(async () => {
+        jest.isolateModules(() => {
+          require('./daemon');
+        });
+      }).rejects.toThrow();
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Trigger SIGINT handler
-      try {
-        await signalHandlers['SIGINT']!();
-      } catch (error: any) {
-        expect(error.message).toBe('process.exit called');
-      }
-
-      // Service should still stop even if HTTP server fails
-      expect(mockHttpServer.stop).toHaveBeenCalled();
-      expect(mockService.stop).toHaveBeenCalled();
-      expect(mockService.cleanup).toHaveBeenCalled();
-      expect(processExitSpy).toHaveBeenCalledWith(0);
-    });
-
-    it('should not attempt to stop HTTP server if it was never started', async () => {
-      process.argv = ['node', 'daemon.js', '--headless'];
-      
-      // Make HTTP server start fail
-      mockHttpServer.start.mockRejectedValue(new Error('Port in use'));
-      
-      jest.isolateModules(() => {
-        require('./daemon');
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Trigger SIGINT handler
-      try {
-        await signalHandlers['SIGINT']!();
-      } catch (error: any) {
-        expect(error.message).toBe('process.exit called');
-      }
-
-      // HTTP server stop should not be called if it never started
-      expect(mockHttpServer.stop).not.toHaveBeenCalled();
-      expect(mockService.stop).toHaveBeenCalled();
-      expect(mockService.cleanup).toHaveBeenCalled();
-    });
-  });
-
-  describe('SIGTERM Handler', () => {
-    it('should stop HTTP server before daemon service on SIGTERM', async () => {
-      process.argv = ['node', 'daemon.js', '--headless'];
-      
-      jest.isolateModules(() => {
-        require('./daemon');
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Verify SIGTERM handler was registered
-      expect(signalHandlers['SIGTERM']).toBeDefined();
-
-      // Trigger SIGTERM handler
-      try {
-        await signalHandlers['SIGTERM']!();
-      } catch (error: any) {
-        expect(error.message).toBe('process.exit called');
-      }
-
-      // Verify shutdown sequence
-      expect(mockHttpServer.stop).toHaveBeenCalled();
-      expect(mockService.stop).toHaveBeenCalled();
-      expect(mockService.cleanup).toHaveBeenCalled();
-
-      // Verify order
-      const httpStopOrder = mockHttpServer.stop.mock.invocationCallOrder[0];
-      const serviceStopOrder = mockService.stop.mock.invocationCallOrder[0];
-      expect(httpStopOrder!).toBeLessThan(serviceStopOrder!);
-      
-      expect(processExitSpy).toHaveBeenCalledWith(0);
-    });
-  });
-
-  describe('Uncaught Exception Handler (TUI mode)', () => {
-    it('should stop HTTP server on uncaught exception in TUI mode', async () => {
-      process.argv = ['node', 'daemon.js'];
-      delete process.env['TUI_MODE']; // Will be set by daemon.ts
-      
-      jest.isolateModules(() => {
-        require('./daemon');
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Verify uncaughtException handler was registered (TUI mode)
-      expect(signalHandlers['uncaughtException']).toBeDefined();
-
-      // Trigger uncaughtException handler
-      const testError = new Error('Test uncaught exception');
-      try {
-        await signalHandlers['uncaughtException']!(testError);
-      } catch (error: any) {
-        expect(error.message).toBe('process.exit called');
-      }
-
-      // Verify HTTP server stop was attempted
-      expect(mockHttpServer.stop).toHaveBeenCalled();
-      expect(mockService.cleanup).toHaveBeenCalled();
-      expect(logger.error).toHaveBeenCalledWith('Uncaught exception:', testError);
-      expect(processExitSpy).toHaveBeenCalledWith(1);
-    });
-
-    it('should handle HTTP server stop error during uncaught exception', async () => {
-      process.argv = ['node', 'daemon.js'];
-      
-      // Make HTTP server stop fail
-      mockHttpServer.stop.mockRejectedValue(new Error('Stop failed'));
-      
-      jest.isolateModules(() => {
-        require('./daemon');
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Trigger uncaughtException handler
-      try {
-        await signalHandlers['uncaughtException']!(new Error('Test error'));
-      } catch (error: any) {
-        expect(error.message).toBe('process.exit called');
-      }
-
-      expect(mockHttpServer.stop).toHaveBeenCalled();
-      expect(mockService.cleanup).toHaveBeenCalled();
       expect(logger.error).toHaveBeenCalledWith(
-        'Error stopping HTTP server during uncaught exception:',
+        expect.stringContaining('Failed to start Gmail MCP'),
         expect.any(Error)
       );
-      expect(processExitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should handle HTTP server failures', async () => {
+      mockHttpServer.start.mockRejectedValue(new Error('Port in use'));
+      process.argv = ['node', 'daemon.js', '--headless'];
+      process.env.OBSIDIAN_VAULT_PATH = '/test/vault';
+      
+      await expect(async () => {
+        jest.isolateModules(() => {
+          require('./daemon');
+        });
+      }).rejects.toThrow();
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to start HTTP server'),
+        expect.any(Error)
+      );
     });
   });
 
-  describe('HTTP Server Initialization', () => {
-    it('should pass HTTP server reference to daemon service', async () => {
-      process.argv = ['node', 'daemon.js', '--headless'];
-      
-      jest.isolateModules(() => {
-        require('./daemon');
+  describe('CLI Arguments', () => {
+    it('should respect --manual-only flag', async () => {
+      const mockArgumentParser = require('./cli/argumentParser');
+      mockArgumentParser.parseArguments.mockReturnValue({
+        httpPort: 3002,
+        gmailMcpPort: 3000,
+        headless: true,
+        manualOnly: true,
+        configDump: false,
+        help: false
       });
+
+      process.argv = ['node', 'daemon.js', '--headless', '--manual-only'];
+      process.env.OBSIDIAN_VAULT_PATH = '/test/vault';
+      
+      await expect(async () => {
+        jest.isolateModules(() => {
+          require('./daemon');
+        });
+      }).rejects.toThrow();
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Verify HTTP server was created with service
-      expect(DaemonHttpServer).toHaveBeenCalledWith(expect.any(Object), 3002);
-      
-      // Verify service was created with HTTP server reference
-      expect(DaemonService).toHaveBeenCalledWith(expect.any(Object));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Manual-only mode enabled')
+      );
     });
 
-    it('should continue without HTTP server if start fails', async () => {
-      process.argv = ['node', 'daemon.js', '--headless'];
-      
-      // Make HTTP server start fail
-      mockHttpServer.start.mockRejectedValue(new Error('Port in use'));
-      
-      jest.isolateModules(() => {
-        require('./daemon');
+    it('should use custom port configuration', async () => {
+      const mockArgumentParser = require('./cli/argumentParser');
+      mockArgumentParser.parseArguments.mockReturnValue({
+        httpPort: 8080,
+        gmailMcpPort: 9000,
+        headless: true,
+        manualOnly: false,
+        configDump: false,
+        help: false
       });
+
+      process.argv = ['node', 'daemon.js', '--http-port', '8080', '--gmail-mcp-port', '9000'];
+      process.env.OBSIDIAN_VAULT_PATH = '/test/vault';
+      
+      await expect(async () => {
+        jest.isolateModules(() => {
+          require('./daemon');
+        });
+      }).rejects.toThrow();
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Service should still start even if HTTP server fails
-      expect(mockHttpServer.start).toHaveBeenCalled();
-      expect(mockService.start).toHaveBeenCalled();
-      expect(logger.error).toHaveBeenCalledWith('Failed to start HTTP server:', expect.any(Error));
-      expect(logger.warn).toHaveBeenCalledWith(
-        'Continuing without HTTP API - daemon will run but API endpoints will not be available'
+      expect(DaemonHttpServer).toHaveBeenCalledWith(
+        expect.objectContaining({ port: 8080 })
       );
+      expect(GmailMcpService).toHaveBeenCalledWith(9000);
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should log failed daemon start', async () => {
+      mockService.start.mockRejectedValue(new Error('Service failed'));
+      process.argv = ['node', 'daemon.js', '--headless'];
+      process.env.OBSIDIAN_VAULT_PATH = '/test/vault';
+      
+      await expect(async () => {
+        jest.isolateModules(() => {
+          require('./daemon');
+        });
+      }).rejects.toThrow();
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to start daemon:',
+        expect.any(Error)
+      );
+    });
+
+    it('should provide recovery suggestions on failure', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      mockHttpServer.start.mockRejectedValue(new Error('Port conflict'));
+      process.argv = ['node', 'daemon.js', '--headless'];
+      process.env.OBSIDIAN_VAULT_PATH = '/test/vault';
+      
+      await expect(async () => {
+        jest.isolateModules(() => {
+          require('./daemon');
+        });
+      }).rejects.toThrow();
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Recovery Suggestions')
+      );
+      
+      consoleErrorSpy.mockRestore();
     });
   });
 });

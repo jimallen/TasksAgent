@@ -1,4 +1,4 @@
-import { obsidianService, ObsidianService } from './obsidianService';
+import { ObsidianService } from './obsidianService';
 import { TaskExtractionResult, ExtractedTask } from '../extractors/claudeTaskExtractor';
 import fs from 'fs/promises';
 import path from 'path';
@@ -153,10 +153,10 @@ describe('ObsidianService', () => {
 
   describe('findExistingNote', () => {
     it('should find note by email ID', async () => {
-      const mockFiles = [
-        '/test/vault/Meetings/2024/01/meeting1.md',
-        '/test/vault/Meetings/2024/01/meeting2.md',
-      ];
+      // const mockFiles = [
+      //   '/test/vault/Meetings/2024/01/meeting1.md',
+      //   '/test/vault/Meetings/2024/01/meeting2.md',
+      // ];
       
       (fs.readdir as jest.Mock).mockResolvedValue([
         { name: '2024', isDirectory: () => true, isFile: () => false },
@@ -328,10 +328,10 @@ Content`;
 
   describe('getVaultStats', () => {
     it('should calculate vault statistics', async () => {
-      const mockFiles = [
-        '/test/vault/Meetings/meeting1.md',
-        '/test/vault/Meetings/meeting2.md',
-      ];
+      // const mockFiles = [
+      //   '/test/vault/Meetings/meeting1.md',
+      //   '/test/vault/Meetings/meeting2.md',
+      // ];
 
       (fs.readdir as jest.Mock).mockImplementation(() => 
         Promise.resolve([
@@ -346,11 +346,11 @@ Content`;
 
       const stats = await service.getVaultStats();
 
-      expect(stats.meetings).toBe(2);
-      expect(stats.totalTasks).toBe(5);
-      expect(stats.completedTasks).toBe(2);
-      expect(stats.pendingTasks).toBe(3);
-      expect(stats.completionRate).toBe('40.0%');
+      expect(stats['meetings']).toBe(2);
+      expect(stats['totalTasks']).toBe(5);
+      expect(stats['completedTasks']).toBe(2);
+      expect(stats['pendingTasks']).toBe(3);
+      expect(stats['completionRate']).toBe('40.0%');
     });
 
     it('should handle empty vault', async () => {
@@ -358,10 +358,10 @@ Content`;
 
       const stats = await service.getVaultStats();
 
-      expect(stats.meetings).toBe(0);
-      expect(stats.totalTasks).toBe(0);
-      expect(stats.completedTasks).toBe(0);
-      expect(stats.completionRate).toBe('0%');
+      expect(stats['meetings']).toBe(0);
+      expect(stats['totalTasks']).toBe(0);
+      expect(stats['completedTasks']).toBe(0);
+      expect(stats['completionRate']).toBe('0%');
     });
   });
 });

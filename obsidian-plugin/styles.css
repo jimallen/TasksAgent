@@ -876,6 +876,98 @@
   box-shadow: 0 2px 8px rgba(var(--interactive-accent-rgb), 0.3);
 }
 
+/* Filter button label */
+.filter-btn-label {
+  display: inline-block;
+}
+
+/* Filter button badge */
+.filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  background: var(--text-muted);
+  margin-left: 4px;
+  transition: all 0.3s;
+}
+
+/* Badge in active button */
+.filter-btn.active .filter-badge {
+  background: rgba(255, 255, 255, 0.3);
+  color: white !important; /* Ensure white text for all active badges */
+  font-weight: 700;
+}
+
+/* Badge colors for each filter type */
+.filter-badge[data-filter-type="high"] {
+  background: #ff6b6b;
+  color: white;
+}
+
+.filter-badge[data-filter-type="medium"] {
+  background: #ffd93d;
+  color: #333; /* Dark text for contrast on yellow */
+}
+
+.filter-badge[data-filter-type="low"] {
+  background: #6bcf7f;
+  color: white;
+}
+
+.filter-badge[data-filter-type="overdue"] {
+  background: #ff4757;
+  color: white;
+}
+
+.filter-badge[data-filter-type="due-today"] {
+  background: #ff9f43;
+  color: white;
+}
+
+.filter-badge[data-filter-type="due-week"] {
+  background: #a29bfe;
+  color: white;
+}
+
+.filter-badge[data-filter-type="completed"] {
+  background: #1dd1a1;
+  color: white;
+}
+
+/* Muted colors for inactive state badges */
+.filter-btn:not(.active) .filter-badge {
+  opacity: 0.8;
+  filter: saturate(0.7);
+}
+
+.filter-btn:not(.active) .filter-badge[data-filter-type="medium"] {
+  color: #555;
+}
+
+/* Hover effects for badges */
+.filter-btn:hover .filter-badge {
+  transform: scale(1.05);
+  opacity: 1;
+  filter: saturate(1);
+}
+
+.filter-btn:hover .filter-badge[data-filter-type="medium"] {
+  color: #222;
+}
+
+/* Active button hover - maintain bright appearance */
+.filter-btn.active:hover .filter-badge {
+  transform: scale(1.05);
+  background: rgba(255, 255, 255, 0.4);
+}
+
 /* Filter button icons */
 .filter-btn::before {
   content: '';
@@ -913,76 +1005,6 @@
   background: #10b981;
 }
 
-/* Stats section */
-.dashboard-stats {
-  margin-bottom: 30px;
-  padding: 20px;
-  background: var(--background-secondary);
-  border-radius: 12px;
-  border: 1px solid var(--background-modifier-border);
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 20px;
-  width: 100%;
-}
-
-.stat-card {
-  background: var(--background-primary);
-  border-radius: 10px;
-  padding: 18px;
-  text-align: center;
-  border: 1px solid var(--background-modifier-border);
-  transition: all 0.3s;
-  position: relative;
-  overflow: hidden;
-}
-
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--interactive-accent), var(--text-accent));
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.stat-card:hover::before {
-  opacity: 1;
-}
-
-.stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-  border-color: var(--interactive-accent);
-}
-
-.stat-value {
-  font-size: 36px;
-  font-weight: 700;
-  margin-bottom: 5px;
-  line-height: 1;
-  display: block;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
-  display: block;
-}
-
-.stat-total .stat-value { color: var(--text-accent); }
-.stat-completed .stat-value { color: var(--color-green); }
-.stat-high .stat-value { color: var(--color-red); }
-.stat-overdue .stat-value { color: var(--color-orange); }
 
 /* Task sections */
 .task-section {
@@ -1289,9 +1311,6 @@
   border-color: var(--background-modifier-border);
 }
 
-.theme-dark .stat-card {
-  background: var(--background-secondary);
-}
 
 .theme-dark .task-list-item {
   background: var(--background-primary);
@@ -1303,9 +1322,6 @@
     grid-template-columns: 1fr;
   }
   
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 /* Card edit controls */

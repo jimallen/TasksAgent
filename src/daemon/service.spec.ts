@@ -56,18 +56,20 @@ describe('DaemonService', () => {
     mockGmailMcp = {
       start: jest.fn().mockResolvedValue(undefined),
       stop: jest.fn().mockResolvedValue(undefined),
+      cleanup: jest.fn().mockResolvedValue(undefined),
       isRunning: jest.fn().mockReturnValue(true),
       getStatus: jest.fn().mockReturnValue({
         running: true,
         pid: 12345,
         requestCount: 0,
         restartCount: 0,
+        errorCount: 0,
         lastError: null,
       }),
       sendRequest: jest.fn(),
       on: jest.fn(),
     } as unknown as jest.Mocked<GmailMcpService>;
-    (GmailMcpService as jest.Mock).mockImplementation(() => mockGmailMcp);
+    (GmailMcpService as unknown as jest.Mock).mockImplementation(() => mockGmailMcp);
   });
 
   describe('Cleanup with HTTP Server and Gmail MCP', () => {
@@ -85,7 +87,7 @@ describe('DaemonService', () => {
       
       await service.cleanup();
 
-      expect(mockGmailMcp.stop).toHaveBeenCalled();
+      expect(mockGmailMcp.cleanup).toHaveBeenCalled();
       expect(mockHttpServer.stop).toHaveBeenCalled();
       expect(mockDb.close).toHaveBeenCalled();
     });
@@ -102,13 +104,13 @@ describe('DaemonService', () => {
     });
 
     it('should handle Gmail MCP stop failure during cleanup', async () => {
-      mockGmailMcp.stop.mockRejectedValue(new Error('Gmail MCP stop failed'));
+      mockGmailMcp.cleanup.mockRejectedValue(new Error('Gmail MCP cleanup failed'));
       service = new DaemonService(mockHttpServer, mockGmailMcp);
       
-      // Should not throw even if Gmail MCP stop fails
+      // Should not throw even if Gmail MCP cleanup fails
       await expect(service.cleanup()).resolves.not.toThrow();
       
-      expect(mockGmailMcp.stop).toHaveBeenCalled();
+      expect(mockGmailMcp.cleanup).toHaveBeenCalled();
       expect(mockHttpServer.stop).toHaveBeenCalled();
       expect(mockDb.close).toHaveBeenCalled();
     });
@@ -132,7 +134,7 @@ describe('DaemonService', () => {
     });
 
     it('should close database even if Gmail MCP stop fails', async () => {
-      mockGmailMcp.stop.mockRejectedValue(new Error('Gmail MCP stop error'));
+      mockGmailMcp.cleanup.mockRejectedValue(new Error('Gmail MCP cleanup error'));
       service = new DaemonService(mockHttpServer, mockGmailMcp);
       
       await service.cleanup();
@@ -143,7 +145,7 @@ describe('DaemonService', () => {
     it('should stop services in correct order during cleanup', async () => {
       const stopOrder: string[] = [];
       
-      mockGmailMcp.stop.mockImplementation(async () => {
+      mockGmailMcp.cleanup.mockImplementation(async () => {
         stopOrder.push('gmail');
       });
       
@@ -179,13 +181,8 @@ describe('DaemonService', () => {
       const stats = service.getStats();
 
       expect(stats.gmailMcpRunning).toBe(true);
-      expect(stats.gmailMcpStatus).toEqual({
-        running: true,
-        pid: 12345,
-        requestCount: 0,
-        restartCount: 0,
-        lastError: null,
-      });
+      expect(stats.gmailMcpPid).toBe(12345);
+      expect(stats.gmailMcpRequestCount).toBe(0);
       expect(mockGmailMcp.getStatus).toHaveBeenCalled();
     });
 
@@ -204,7 +201,7 @@ describe('DaemonService', () => {
       const stats = service.getStats();
 
       expect(stats.gmailMcpRunning).toBeUndefined();
-      expect(stats.gmailMcpStatus).toBeUndefined();
+      expect(stats.gmailMcpPid).toBeUndefined();
     });
 
     it('should reflect HTTP server stopped state', () => {
@@ -221,9 +218,10 @@ describe('DaemonService', () => {
       mockGmailMcp.isRunning.mockReturnValue(false);
       mockGmailMcp.getStatus.mockReturnValue({
         running: false,
-        pid: null,
+        pid: undefined,
         requestCount: 0,
         restartCount: 3,
+        errorCount: 5,
         lastError: 'Max restart attempts reached',
       });
       
@@ -232,7 +230,7 @@ describe('DaemonService', () => {
       const stats = service.getStats();
 
       expect(stats.gmailMcpRunning).toBe(false);
-      expect(stats.gmailMcpStatus.lastError).toBe('Max restart attempts reached');
+      expect(stats.gmailMcpPid).toBeUndefined();
     });
   });
 
@@ -263,23 +261,40 @@ describe('DaemonService', () => {
 
     it('should wait for processing to complete before stopping', async () => {
       service = new DaemonService();
-      jest.useFakeTimers();
+      
+      // Mock the processor to simulate processing
+      let resolveProcessing: any;
+      const processingPromise = new Promise(resolve => {
+        resolveProcessing = resolve;
+      });
+      
+      const mockProcessor = (EmailProcessor as jest.Mock).mock.results[0].value;
+      mockProcessor.processEmails.mockReturnValue(processingPromise);
+      
+      // Start service
+      await service.start();
       
       // Start processing
       const processPromise = service.processEmails();
       
-      // Try to stop while processing
+      // Try to stop while processing (won't complete until processing is done)
       const stopPromise = service.stop();
       
-      // Advance timers to simulate processing completion
-      jest.advanceTimersByTime(1000);
+      // Verify waiting message was logged
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(logger.info).toHaveBeenCalledWith('Waiting for current processing to complete...');
       
       // Complete processing
+      resolveProcessing({
+        emailsProcessed: 0,
+        tasksExtracted: 0,
+        notesCreated: 0,
+      });
+      
       await processPromise;
       await stopPromise;
-
-      expect(logger.info).toHaveBeenCalledWith('Waiting for current processing to complete...');
-      jest.useRealTimers();
+      
+      expect(logger.info).toHaveBeenCalledWith('Daemon service stopped');
     });
   });
 

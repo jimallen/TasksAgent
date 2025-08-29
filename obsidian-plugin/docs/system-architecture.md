@@ -38,6 +38,7 @@ graph TB
         N[Status Bar]
         O[Dashboard View<br/>with Task Cards]
         P[Task Edit Controls]
+        Q[Filter Buttons<br/>with Count Badges]
     end
     
     A --> L
@@ -45,6 +46,7 @@ graph TB
     A --> N
     D --> O
     O --> P
+    D --> Q
 ```
 
 ## Component Details
@@ -87,17 +89,24 @@ graph TB
   - Priority-based task grouping (High/Medium/Low)
   - Assignee-based card organization
   - Interactive task completion
-  - Advanced filtering (Today, This Week, My Tasks)
-  - Statistics overview
+  - Advanced filtering (Today, This Week, Past Due, My Tasks)
+  - Filter buttons with real-time count badges
   - In-line task editing with priority/assignee changes
   - Toggle between My Tasks and All Tasks views
-- **UI Improvements**:
+  - Smooth task completion animations (0.3s fade-out)
+- **UI Improvements** (Latest):
+  - Filter button count badges show totals for each filter
+  - Removed redundant stats cards (replaced by filter counters)
   - Edit button positioned in top-left of each task item
   - Proper flexbox layout for maintainable structure
   - Theme-aware styling with CSS variables
   - High contrast metadata tags for better readability
+  - Support for comma-separated names in "My Tasks" filter
+- **Performance**:
+  - 150ms debounced count updates
+  - Efficient task filtering with cached counts
 - **Customization**:
-  - Configurable personal task filtering
+  - Configurable personal task filtering (supports multiple names)
   - User-specific name prioritization
   - Support for Obsidian's built-in priority syntax (⏫ ⏬ 🔼 🔽)
 

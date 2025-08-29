@@ -51,7 +51,7 @@ describe('NotificationService', () => {
     });
 
     it('should send notification to desktop channel', async () => {
-      (notifier.notify as jest.Mock).mockImplementation((options, callback) => {
+      (notifier.notify as jest.Mock).mockImplementation((_options, callback) => {
         callback(null, 'response');
       });
 
@@ -97,7 +97,7 @@ describe('NotificationService', () => {
     });
 
     it('should send to multiple channels', async () => {
-      (notifier.notify as jest.Mock).mockImplementation((options, callback) => {
+      (notifier.notify as jest.Mock).mockImplementation((_options, callback) => {
         callback(null, 'response');
       });
 
@@ -371,7 +371,7 @@ describe('NotificationService', () => {
         value: 'darwin'
       });
 
-      (notifier.notify as jest.Mock).mockImplementation((options, callback) => {
+      (notifier.notify as jest.Mock).mockImplementation((_options, callback) => {
         callback(null, 'response');
       });
 
@@ -399,7 +399,7 @@ describe('NotificationService', () => {
         value: 'linux'
       });
 
-      (notifier.notify as jest.Mock).mockImplementation((options, callback) => {
+      (notifier.notify as jest.Mock).mockImplementation((_options, callback) => {
         callback(null, 'response');
       });
 

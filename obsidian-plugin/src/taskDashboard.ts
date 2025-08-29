@@ -26,6 +26,16 @@ interface GroupedTasks {
   [key: string]: Task[];
 }
 
+interface FilterCounts {
+  high: number;
+  medium: number;
+  low: number;
+  today: number;
+  week: number;
+  overdue: number;
+  completed: number;
+}
+
 interface PluginSettings {
   dashboardMyName?: string;
   dashboardShowOnlyMyTasks?: boolean;
@@ -43,6 +53,9 @@ export class TaskDashboardView extends ItemView {
   private showOnlyMyTasks: boolean = true;
   private allTasks: Task[] = [];
   private isLoading: boolean = false;
+  private filterCounts: FilterCounts | null = null;
+  private badgeElements: Map<string, HTMLElement> = new Map();
+  private updateCountsDebounceTimer: NodeJS.Timeout | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin?: MeetingTasksPlugin) {
     super(leaf);
@@ -68,6 +81,11 @@ export class TaskDashboardView extends ItemView {
   }
 
   async onClose() {
+    // Clear any pending debounce timer
+    if (this.updateCountsDebounceTimer) {
+      clearTimeout(this.updateCountsDebounceTimer);
+      this.updateCountsDebounceTimer = null;
+    }
     this.component.unload();
   }
 
@@ -131,6 +149,7 @@ export class TaskDashboardView extends ItemView {
       toggleBtn.onclick = () => {
         this.showOnlyMyTasks = !this.showOnlyMyTasks;
         toggleBtn.textContent = this.showOnlyMyTasks ? '👥 Show All Tasks' : '👤 Show My Tasks';
+        this.updateFilterCounts(true); // Update counts for new view mode (immediate)
         this.updateTaskDisplay();
       };
     }
@@ -147,9 +166,6 @@ export class TaskDashboardView extends ItemView {
     const filters = container.createDiv('dashboard-filters');
     this.createFilterButtons(filters);
     
-    // Create stats section
-    const stats = container.createDiv('dashboard-stats');
-    
     // Load all tasks with error handling
     try {
       this.isLoading = true;
@@ -162,11 +178,11 @@ export class TaskDashboardView extends ItemView {
       this.isLoading = false;
     }
     
+    // Update filter counts after loading tasks (immediate update)
+    this.updateFilterCounts(true);
+    
     // Get filtered tasks based on current view mode
     const displayTasks = this.getFilteredTasks();
-    
-    // Display stats
-    this.displayStats(stats, displayTasks);
     
     // Create task sections
     await this.displayTasks(container, displayTasks);
@@ -175,24 +191,59 @@ export class TaskDashboardView extends ItemView {
     this.applyDashboardStyles();
   }
 
+  private createBadgeElement(count: number, filterType: string): HTMLElement | null {
+    // Don't create badge if count is zero
+    if (count === 0) {
+      return null;
+    }
+    
+    const badge = document.createElement('span');
+    badge.className = 'filter-badge';
+    badge.setAttribute('data-filter-type', filterType);
+    badge.textContent = count.toString();
+    
+    return badge;
+  }
+
   private createFilterButtons(container: HTMLElement) {
     const filterGroup = container.createDiv('filter-group');
     
+    // Clear existing badge references
+    this.badgeElements.clear();
+    
+    // Calculate current filter counts
+    const counts = this.getCurrentFilterCounts();
+    this.filterCounts = counts; // Cache the counts
+    
     const filters = [
-      { label: 'High Priority', filter: 'high', active: true, dataAttr: 'high' },
-      { label: 'Medium Priority', filter: 'medium', dataAttr: 'medium' },
-      { label: 'Low Priority', filter: 'low', dataAttr: 'low' },
-      { label: 'Due Today', filter: 'today', dataAttr: 'due-today' },
-      { label: 'Due This Week', filter: 'week', dataAttr: 'due-week' },
-      { label: 'Completed', filter: 'completed', dataAttr: 'completed' }
+      { label: 'High Priority', filter: 'high', active: true, dataAttr: 'high', count: counts.high },
+      { label: 'Medium Priority', filter: 'medium', dataAttr: 'medium', count: counts.medium },
+      { label: 'Low Priority', filter: 'low', dataAttr: 'low', count: counts.low },
+      { label: 'Past Due', filter: 'overdue', dataAttr: 'overdue', count: counts.overdue },
+      { label: 'Due Today', filter: 'today', dataAttr: 'due-today', count: counts.today },
+      { label: 'Due This Week', filter: 'week', dataAttr: 'due-week', count: counts.week },
+      { label: 'Completed', filter: 'completed', dataAttr: 'completed', count: counts.completed }
     ];
     
     filters.forEach(f => {
       const btn = filterGroup.createEl('button', {
-        text: f.label,
         cls: f.active ? 'filter-btn active' : 'filter-btn'
       });
       btn.setAttribute('data-filter', f.dataAttr);
+      
+      // Create a wrapper span for the label and badge
+      const labelSpan = btn.createEl('span', {
+        text: f.label,
+        cls: 'filter-btn-label'
+      });
+      
+      // Add badge if count > 0
+      const badge = this.createBadgeElement(f.count, f.dataAttr);
+      if (badge) {
+        btn.appendChild(badge);
+        // Store reference to badge element for dynamic updates
+        this.badgeElements.set(f.filter, badge);
+      }
       
       btn.onclick = () => {
         // Toggle filter - click active button to show all
@@ -303,35 +354,6 @@ export class TaskDashboardView extends ItemView {
     }
     
     return tasks;
-  }
-
-  private displayStats(container: HTMLElement, tasks: Task[]): void {
-    const total = tasks.length;
-    const completed = tasks.filter(t => t.completed).length;
-    const high = tasks.filter(t => t.priority === 'high' && !t.completed).length;
-    const overdue = tasks.filter(t => {
-      if (!t.dueDate || t.completed) return false;
-      return new Date(t.dueDate) < new Date();
-    }).length;
-    
-    const statsGrid = container.createDiv('stats-grid');
-    
-    // Create stat cards
-    const totalCard = statsGrid.createDiv('stat-card stat-total');
-    totalCard.createDiv('stat-value').textContent = total.toString();
-    totalCard.createDiv('stat-label').textContent = 'Total Tasks';
-    
-    const completedCard = statsGrid.createDiv('stat-card stat-completed');
-    completedCard.createDiv('stat-value').textContent = `${completed}/${total}`;
-    completedCard.createDiv('stat-label').textContent = 'Completed';
-    
-    const highCard = statsGrid.createDiv('stat-card stat-high');
-    highCard.createDiv('stat-value').textContent = high.toString();
-    highCard.createDiv('stat-label').textContent = 'High Priority';
-    
-    const overdueCard = statsGrid.createDiv('stat-card stat-overdue');
-    overdueCard.createDiv('stat-value').textContent = overdue.toString();
-    overdueCard.createDiv('stat-label').textContent = 'Overdue';
   }
 
   private async displayTasks(container: HTMLElement, tasks: Task[]) {
@@ -562,7 +584,7 @@ export class TaskDashboardView extends ItemView {
             if (p === task.priority) option.selected = true;
           });
           prioritySelect.onchange = async () => {
-            await this.updateTaskPriority(task, prioritySelect.value as 'high' | 'medium' | 'low');
+            await this.updateTaskPriority(task, prioritySelect.value as 'high' | 'medium' | 'low', li);
           };
           
           // Assignee input
@@ -580,7 +602,7 @@ export class TaskDashboardView extends ItemView {
             title: 'Save assignee'
           });
           saveBtn.onclick = async () => {
-            await this.updateTaskAssignee(task, assigneeInput.value);
+            await this.updateTaskAssignee(task, assigneeInput.value, li);
           };
         }
       }
@@ -639,6 +661,8 @@ export class TaskDashboardView extends ItemView {
           
           // Update the stats without full refresh
           this.updateStatsOnly();
+          // Update filter counts after task completion
+          this.updateFilterCounts();
         }, 300);
       } else if (!completed) {
         // If unchecking, we need to refresh to show it again
@@ -650,7 +674,7 @@ export class TaskDashboardView extends ItemView {
     }
   }
 
-  private async updateTaskPriority(task: Task, newPriority: 'high' | 'medium' | 'low') {
+  private async updateTaskPriority(task: Task, newPriority: 'high' | 'medium' | 'low', taskElement?: HTMLElement) {
     try {
       const content = await this.app.vault.read(task.file);
       const lines = content.split('\n');
@@ -682,15 +706,98 @@ export class TaskDashboardView extends ItemView {
     
       await this.app.vault.modify(task.file, lines.join('\n'));
       
-      // Refresh the dashboard
-      setTimeout(() => this.refresh(), 500);
+      // Update task data
+      task.priority = newPriority;
+      
+      // If we have the task element, move it to the new priority section
+      if (taskElement) {
+        const currentCard = taskElement.closest('.task-card') as HTMLElement;
+        const currentSection = currentCard?.closest('.task-section') as HTMLElement;
+        
+        if (currentCard && currentSection) {
+          // Find the target section
+          const container = this.containerEl.children[1] as HTMLElement;
+          let targetSectionClass = '';
+          if (newPriority === 'high') targetSectionClass = 'high-priority';
+          else if (newPriority === 'medium') targetSectionClass = 'medium-priority';
+          else targetSectionClass = 'low-priority';
+          
+          const targetSection = container.querySelector(`.task-section.${targetSectionClass}`) as HTMLElement;
+          
+          if (targetSection && targetSection !== currentSection) {
+            // Animate the move
+            taskElement.style.transition = 'opacity 0.3s ease-out';
+            taskElement.style.opacity = '0';
+            
+            setTimeout(() => {
+              // Remove from current card
+              taskElement.remove();
+              
+              // Check if current card is now empty
+              const remainingTasks = currentCard.querySelectorAll('.task-list-item');
+              if (remainingTasks.length === 0) {
+                currentCard.style.transition = 'opacity 0.3s ease-out';
+                currentCard.style.opacity = '0';
+                setTimeout(() => currentCard.remove(), 300);
+              }
+              
+              // Find or create assignee card in target section
+              const assignee = task.assignee;
+              let targetCard = Array.from(targetSection.querySelectorAll('.task-card')).find(card => {
+                const title = card.querySelector('h3')?.textContent;
+                return title?.includes(assignee);
+              }) as HTMLElement;
+              
+              if (!targetCard) {
+                // Create new card
+                targetCard = targetSection.createDiv(`task-card ${newPriority}-card`);
+                const header = targetCard.createDiv('card-header');
+                header.createEl('h3', {
+                  text: `👤 ${assignee}`,
+                  cls: 'card-assignee-title'
+                });
+                targetCard.createEl('ul', { cls: 'task-list' });
+              }
+              
+              // Add task to target card
+              const targetList = targetCard.querySelector('.task-list');
+              if (targetList) {
+                // Clone the task element structure
+                const newLi = targetList.createEl('li', { cls: 'task-list-item' });
+                newLi.innerHTML = taskElement.innerHTML;
+                
+                // Reattach event handlers
+                const checkbox = newLi.querySelector('.task-checkbox') as HTMLInputElement;
+                if (checkbox) {
+                  checkbox.onclick = async () => {
+                    await this.toggleTask(task, checkbox.checked, newLi);
+                  };
+                }
+                
+                // Fade in
+                newLi.style.opacity = '0';
+                setTimeout(() => {
+                  newLi.style.transition = 'opacity 0.3s ease-in';
+                  newLi.style.opacity = '1';
+                }, 10);
+              }
+              
+              // Update stats
+              this.updateStatsOnly();
+            }, 300);
+          }
+        }
+      } else {
+        // Fallback to refresh if no element provided
+        setTimeout(() => this.refresh(), 500);
+      }
     } catch (error) {
       console.error('Failed to update task priority:', error);
       new Notice('Failed to update priority. Please try again.');
     }
   }
 
-  private async updateTaskAssignee(task: Task, newAssignee: string) {
+  private async updateTaskAssignee(task: Task, newAssignee: string, taskElement?: HTMLElement) {
     try {
       const content = await this.app.vault.read(task.file);
       const lines = content.split('\n');
@@ -717,8 +824,114 @@ export class TaskDashboardView extends ItemView {
     
       await this.app.vault.modify(task.file, lines.join('\n'));
       
-      // Refresh the dashboard
-      setTimeout(() => this.refresh(), 500);
+      // Update task data
+      const oldAssignee = task.assignee;
+      task.assignee = newAssignee.trim();
+      
+      // If we have the task element, move it to the new assignee's card
+      if (taskElement && oldAssignee !== task.assignee) {
+        const currentCard = taskElement.closest('.task-card') as HTMLElement;
+        const currentSection = currentCard?.closest('.task-section') as HTMLElement;
+        
+        if (currentCard && currentSection) {
+          // Animate the move
+          taskElement.style.transition = 'opacity 0.3s ease-out';
+          taskElement.style.opacity = '0';
+          
+          setTimeout(() => {
+            // Remove from current card
+            taskElement.remove();
+            
+            // Check if current card is now empty
+            const remainingTasks = currentCard.querySelectorAll('.task-list-item');
+            if (remainingTasks.length === 0) {
+              currentCard.style.transition = 'opacity 0.3s ease-out';
+              currentCard.style.opacity = '0';
+              setTimeout(() => currentCard.remove(), 300);
+            }
+            
+            // Find or create assignee card in the same section
+            let targetCard = Array.from(currentSection.querySelectorAll('.task-card')).find(card => {
+              const title = card.querySelector('h3')?.textContent;
+              return title?.includes(task.assignee);
+            }) as HTMLElement;
+            
+            if (!targetCard) {
+              // Create new card for the new assignee
+              const priority = task.priority || 'medium';
+              targetCard = currentSection.createDiv(`task-card ${priority}-card`);
+              const header = targetCard.createDiv('card-header');
+              header.createEl('h3', {
+                text: `👤 ${task.assignee}`,
+                cls: 'card-assignee-title'
+              });
+              targetCard.createEl('ul', { cls: 'task-list' });
+            }
+            
+            // Add task to target card
+            const targetList = targetCard.querySelector('.task-list');
+            if (targetList) {
+              // Clone the task element structure
+              const newLi = targetList.createEl('li', { cls: 'task-list-item' });
+              newLi.innerHTML = taskElement.innerHTML;
+              
+              // Update the displayed assignee in the metadata
+              const metadataSpan = newLi.querySelector('.task-metadata');
+              if (metadataSpan) {
+                metadataSpan.innerHTML = metadataSpan.innerHTML.replace(/👤\s*[^<]*/g, `👤 ${task.assignee}`);
+              }
+              
+              // Reattach event handlers
+              const checkbox = newLi.querySelector('.task-checkbox') as HTMLInputElement;
+              if (checkbox) {
+                checkbox.onclick = async () => {
+                  await this.toggleTask(task, checkbox.checked, newLi);
+                };
+              }
+              
+              // Reattach edit button handler
+              const editBtn = newLi.querySelector('.edit-button') as HTMLElement;
+              if (editBtn) {
+                const editContainer = newLi.querySelector('.edit-container') as HTMLElement;
+                if (editContainer) {
+                  editBtn.onclick = () => {
+                    editContainer.style.display = editContainer.style.display === 'none' ? 'flex' : 'none';
+                  };
+                  
+                  // Reattach priority and assignee handlers
+                  const prioritySelect = editContainer.querySelector('select') as HTMLSelectElement;
+                  if (prioritySelect) {
+                    prioritySelect.onchange = async () => {
+                      await this.updateTaskPriority(task, prioritySelect.value as 'high' | 'medium' | 'low', newLi);
+                    };
+                  }
+                  
+                  const saveBtn = editContainer.querySelector('button') as HTMLButtonElement;
+                  const assigneeInput = editContainer.querySelector('input') as HTMLInputElement;
+                  if (saveBtn && assigneeInput) {
+                    saveBtn.onclick = async () => {
+                      await this.updateTaskAssignee(task, assigneeInput.value, newLi);
+                    };
+                  }
+                }
+              }
+              
+              // Fade in
+              newLi.style.opacity = '0';
+              setTimeout(() => {
+                newLi.style.transition = 'opacity 0.3s ease-in';
+                newLi.style.opacity = '1';
+              }, 10);
+            }
+            
+            // Update stats
+            this.updateStatsOnly();
+          }, 300);
+        }
+      } else if (!taskElement) {
+        // Fallback to refresh if no element provided
+        setTimeout(() => this.refresh(), 500);
+      }
     } catch (error) {
       console.error('Failed to update task assignee:', error);
       new Notice('Failed to update assignee. Please try again.');
@@ -777,6 +990,9 @@ export class TaskDashboardView extends ItemView {
               show = false;
             }
             break;
+          case 'overdue':
+            show = this.hasTasksOverdue(card);
+            break;
           case 'today':
             show = this.hasTasksDueToday(card);
             break;
@@ -831,38 +1047,35 @@ export class TaskDashboardView extends ItemView {
     }
     return false;
   }
-
-  private updateStatsOnly() {
-    try {
-      const container = this.containerEl.children[1] as HTMLElement;
-      const statsContainer = container.querySelector('.dashboard-stats');
-      
-      if (statsContainer) {
-        // Recalculate stats from current visible tasks
-        const visibleTasks: Task[] = [];
-        const taskListItems = container.querySelectorAll('.task-list-item:not([style*="opacity: 0"])');
-        
-        // Get the count of visible tasks
-        const total = taskListItems.length;
-        const completed = container.querySelectorAll('.task-checkbox:checked').length;
-        const highPriority = container.querySelectorAll('.high-card .task-list-item:not([style*="opacity: 0"])').length;
-        
-        // Calculate overdue (this is approximate since we don't have the task data readily available)
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        // Update stat values
-        const statElements = statsContainer.querySelectorAll('.stat-value');
-        if (statElements.length >= 4) {
-          statElements[0].textContent = total.toString();          // Total
-          statElements[1].textContent = completed.toString();      // Completed
-          statElements[2].textContent = highPriority.toString();   // High Priority
-          // Keep overdue as-is since we can't easily recalculate
+  
+  private hasTasksOverdue(card: HTMLElement): boolean {
+    const dueDates = card.querySelectorAll('.task-due');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    for (const elem of Array.from(dueDates)) {
+      const dateText = elem.textContent?.match(/\d{4}-\d{2}-\d{2}/);
+      if (dateText) {
+        const dueDate = new Date(dateText[0]);
+        // Check if the task is overdue (past due date)
+        if (dueDate < today) {
+          // Also check if the task is not completed
+          const taskItem = elem.closest('.task-list-item');
+          if (taskItem) {
+            const checkbox = taskItem.querySelector('.task-checkbox') as HTMLInputElement;
+            if (checkbox && !checkbox.checked) {
+              return true;
+            }
+          }
         }
       }
-    } catch (error) {
-      console.error('Failed to update stats:', error);
     }
+    return false;
+  }
+
+  private updateStatsOnly() {
+    // Stats section has been removed - counters are now shown in filter buttons
+    // This method is kept for backward compatibility but does nothing
   }
 
   private getFilteredTasks(): Task[] {
@@ -888,19 +1101,139 @@ export class TaskDashboardView extends ItemView {
     return this.allTasks;
   }
   
+  private calculateFilterCounts(tasks: Task[]): FilterCounts {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
+    const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+    
+    const counts: FilterCounts = {
+      high: 0,
+      medium: 0,
+      low: 0,
+      today: 0,
+      week: 0,
+      overdue: 0,
+      completed: 0
+    };
+    
+    for (const task of tasks) {
+      // Priority counts (only for non-completed tasks)
+      if (!task.completed) {
+        if (task.priority === 'high') counts.high++;
+        else if (task.priority === 'medium') counts.medium++;
+        else if (task.priority === 'low') counts.low++;
+        
+        // Due date counts
+        if (task.dueDate) {
+          const dueDate = new Date(task.dueDate);
+          
+          // Overdue - past due date and not completed
+          if (dueDate < today) {
+            counts.overdue++;
+          }
+          // Due today
+          else if (dueDate >= today && dueDate <= endOfToday) {
+            counts.today++;
+          }
+          // Due this week (including today)
+          if (dueDate >= today && dueDate <= weekFromNow) {
+            counts.week++;
+          }
+        }
+      }
+      
+      // Completed count
+      if (task.completed) {
+        counts.completed++;
+      }
+    }
+    
+    return counts;
+  }
+  
+  private getCurrentFilterCounts(): FilterCounts {
+    // Get the appropriate task list based on current view mode
+    const tasksToCount = this.getFilteredTasks();
+    return this.calculateFilterCounts(tasksToCount);
+  }
+  
+  private updateFilterCountsImmediate(): void {
+    // Recalculate counts
+    const newCounts = this.getCurrentFilterCounts();
+    this.filterCounts = newCounts;
+    
+    // Update each badge element
+    const updateBadge = (filterKey: string, count: number) => {
+      const badge = this.badgeElements.get(filterKey);
+      if (badge) {
+        if (count > 0) {
+          badge.textContent = count.toString();
+          badge.style.display = 'inline-flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      } else if (count > 0) {
+        // Badge doesn't exist but we have a count, need to create it
+        const button = this.containerEl.querySelector(`[data-filter="${this.getDataAttr(filterKey)}"]`);
+        if (button) {
+          const newBadge = this.createBadgeElement(count, this.getDataAttr(filterKey));
+          if (newBadge) {
+            button.appendChild(newBadge);
+            this.badgeElements.set(filterKey, newBadge);
+          }
+        }
+      }
+    };
+    
+    // Update all filter badges
+    updateBadge('high', newCounts.high);
+    updateBadge('medium', newCounts.medium);
+    updateBadge('low', newCounts.low);
+    updateBadge('overdue', newCounts.overdue);
+    updateBadge('today', newCounts.today);
+    updateBadge('week', newCounts.week);
+    updateBadge('completed', newCounts.completed);
+  }
+  
+  private updateFilterCounts(immediate: boolean = false): void {
+    if (immediate) {
+      // Update immediately without debouncing
+      this.updateFilterCountsImmediate();
+      return;
+    }
+    
+    // Clear existing timer
+    if (this.updateCountsDebounceTimer) {
+      clearTimeout(this.updateCountsDebounceTimer);
+    }
+    
+    // Set new debounced update
+    this.updateCountsDebounceTimer = setTimeout(() => {
+      this.updateFilterCountsImmediate();
+      this.updateCountsDebounceTimer = null;
+    }, 150); // 150ms debounce delay
+  }
+  
+  private getDataAttr(filterKey: string): string {
+    const mapping: Record<string, string> = {
+      'high': 'high',
+      'medium': 'medium',
+      'low': 'low',
+      'overdue': 'overdue',
+      'today': 'due-today',
+      'week': 'due-week',
+      'completed': 'completed'
+    };
+    return mapping[filterKey] || filterKey;
+  }
+  
   private async updateTaskDisplay() {
     try {
       const container = this.containerEl.children[1] as HTMLElement;
       
-      // Find and clear the stats and task sections
-      const statsContainer = container.querySelector('.dashboard-stats');
+      // Find and clear the task sections
       const taskSections = container.querySelectorAll('.task-section');
-      
-      if (statsContainer) {
-        (statsContainer as HTMLElement).empty();
-        const displayTasks = this.getFilteredTasks();
-        this.displayStats(statsContainer as HTMLElement, displayTasks);
-      }
       
       // Remove old task sections
       taskSections.forEach(section => section.remove());
