@@ -400,6 +400,25 @@ curl http://localhost:3002/status
 
 ## Recent Enhancements
 
+### API Key Integration (2025-08-30)
+- **Feature**: Plugin now passes Anthropic API key to daemon
+- **Configuration**: API key stored in plugin settings
+- **Processing**: Daemon receives key via `/trigger` endpoint
+- **Result**: Full Claude AI task extraction enabled
+
+### Obsidian Plugin Updates (2025-08-29)
+
+#### Filter Button Count Badges
+- **Feature**: Real-time count badges on all filter buttons
+- **Performance**: 150ms debounced updates
+- **Behavior**: Zero counts hide badges automatically
+- **Visual**: Color-coded badges match filter types
+
+#### Dashboard UI Simplification
+- **Removed**: Redundant stats cards at top
+- **Integrated**: Metrics directly in filter buttons
+- **Result**: Cleaner interface with better information density
+
 ### Obsidian Plugin Updates (2025-08-27)
 
 #### Multi-Name Task Filtering
@@ -418,7 +437,6 @@ curl http://localhost:3002/status
 - **data.json**: Now gitignored for API key protection
 - **Template**: data.json.example provided for setup
 - **Defaults**: Removed hardcoded personal information
-4. Verify health endpoints
 
 ## Future Enhancements
 

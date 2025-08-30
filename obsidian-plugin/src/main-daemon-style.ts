@@ -408,7 +408,8 @@ export default class MeetingTasksPlugin extends Plugin {
             source: 'obsidian-plugin',
             quiet: true,  // Use quiet mode to suppress notifications
             lookbackHours: this.settings.lookbackHours,  // Pass the plugin's lookback setting
-            meetingPlatforms: this.settings.meetingPlatforms  // Pass platform preferences
+            meetingPlatforms: this.settings.meetingPlatforms,  // Pass platform preferences
+            anthropicApiKey: this.settings.anthropicApiKey  // Pass the API key from plugin settings
           })
         });
         

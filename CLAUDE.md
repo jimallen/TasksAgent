@@ -152,9 +152,21 @@ Edit `src/database/schema.sql`:
 4. Execute tests: `npm test`
 5. Test email processing: `npm run start:once`
 
-## Recent Updates (2025-08-27)
+## Recent Updates
 
-### Obsidian Plugin Enhancements
+### API Key Integration (2025-08-30)
+- **Plugin-to-Daemon Communication**: API key now passed from plugin settings
+- **Dynamic Configuration**: No need for .env file API key
+- **HTTP Endpoint**: `/trigger` accepts `anthropicApiKey` parameter
+- **Result**: Full Claude AI task extraction without fallback mode
+
+### Filter Button Enhancements (2025-08-29)
+- **Count Badges**: Real-time task counts on filter buttons
+- **Dashboard Simplification**: Removed redundant stats cards
+- **Performance**: 150ms debounced updates for smooth UX
+- **Visual Design**: Color-coded badges match filter types
+
+### Obsidian Plugin Enhancements (2025-08-27)
 - **Multi-Name Task Filtering**: Support comma-separated names in "My Tasks" filter
   - Configuration: `dashboardMyName: "name1, name2, the group"`
   - Shows tasks assigned to any specified name
@@ -165,11 +177,6 @@ Edit `src/database/schema.sql`:
   - `obsidian-plugin/data.json` now gitignored
   - `data.json.example` template provided
   - Removed hardcoded defaults from `taskFilter.ts`
-
-### CEL Board Meeting Processing Fix
-- Issue: Empty meeting notes despite email content
-- Solution: Clear database entry and reprocess
-- Result: Successfully extracted 10 tasks with 85% confidence
 
 ## Troubleshooting Guide
 
