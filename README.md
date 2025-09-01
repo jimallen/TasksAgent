@@ -336,9 +336,13 @@ When running with `npm run daemon`, the terminal interface provides:
 
 ```bash
 # Install as systemd service (Linux)
+# Will prompt for Obsidian vault path during installation
 sudo npm run daemon:install
 sudo systemctl start meeting-transcript-agent@$USER
 sudo systemctl enable meeting-transcript-agent@$USER
+
+# To uninstall the service
+sudo npm run daemon:uninstall
 ```
 
 See [Daemon Service Documentation](docs/daemon-service.md) for details.
