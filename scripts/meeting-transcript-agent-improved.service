@@ -14,13 +14,19 @@ StandardOutput=append:/home/%i/Code/TasksAgent/logs/daemon.log
 StandardError=append:/home/%i/Code/TasksAgent/logs/daemon-error.log
 Environment="NODE_ENV=production"
 
+# Load environment variables from .env file
+EnvironmentFile=-/home/%i/Code/TasksAgent/.env
+
 # Security settings
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-# Allow writing to project directory and entire Documents folder for Obsidian vault
-ReadWritePaths=/home/%i/Code/TasksAgent /home/%i/Documents
+# Allow writing to project directory only
+# The Obsidian vault path should be handled via environment variable
+ReadWritePaths=/home/%i/Code/TasksAgent
+# For development/testing - uncomment and adjust as needed:
+# ReadWritePaths=/home/%i/Code/TasksAgent /home/%i/Documents
 
 [Install]
 WantedBy=multi-user.target

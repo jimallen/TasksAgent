@@ -226,8 +226,12 @@ npm run daemon:headless  # No UI, quiet mode
 
 ### 3. Systemd Service (Linux)
 ```bash
-sudo npm run daemon:install
-sudo systemctl start meeting-transcript-agent
+# Install service with dynamic vault configuration
+sudo ./scripts/install-service.sh
+# Script will prompt for Obsidian vault path or read from .env
+
+# Start the service
+sudo systemctl start meeting-transcript-agent@$USER
 ```
 
 ### 4. Docker Container
@@ -399,6 +403,13 @@ curl http://localhost:3002/status
 3. Start unified daemon
 
 ## Recent Enhancements
+
+### Systemd Service Improvements (2025-09-01)
+- **Dynamic Vault Configuration**: Install script now prompts for vault path
+- **User Detection**: Proper handling of sudo user (uses $SUDO_USER not root)
+- **Security**: Service file generated with specific vault write permissions
+- **Build Process**: Runs npm build as correct user, not root
+- **Installation**: Service automatically configured for user's Obsidian vault
 
 ### API Key Integration (2025-08-30)
 - **Feature**: Plugin now passes Anthropic API key to daemon

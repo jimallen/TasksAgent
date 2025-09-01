@@ -13,7 +13,7 @@
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/TasksAgent.git
+git clone https://github.com/jimallen/TasksAgent.git
 cd TasksAgent/obsidian-plugin
 ```
 

@@ -61,7 +61,7 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/yourusername/meeting-transcript-agent.git
+git clone https://github.com/jimallen/meeting-transcript-agent.git
 cd meeting-transcript-agent
 npm install
 ```
@@ -610,7 +610,7 @@ MIT License - see LICENSE file for details
 
 ## 💬 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/meeting-transcript-agent/issues)
+- **Issues**: [GitHub Issues](https://github.com/jimallen/meeting-transcript-agent/issues)
 - **Documentation**: [docs/](docs/) directory
 - **AI Context**: [CLAUDE.md](CLAUDE.md)
 - **Architecture**: [System Design](docs/system-architecture.md)

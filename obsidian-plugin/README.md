@@ -31,7 +31,7 @@ Automatically import meeting tasks and notes from email transcripts using AI-pow
 
 ### From Release
 
-1. Download the latest `meeting-tasks-X.X.X.zip` from the [Releases](https://github.com/yourusername/TasksAgent/releases) page
+1. Download the latest `meeting-tasks-X.X.X.zip` from the [Releases](https://github.com/jimallen/TasksAgent/releases) page
 2. Extract the zip file into your vault's `.obsidian/plugins/meeting-tasks/` folder
 3. Reload Obsidian
 4. Enable the plugin in Settings → Community Plugins
@@ -40,7 +40,7 @@ Automatically import meeting tasks and notes from email transcripts using AI-pow
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/TasksAgent.git
+git clone https://github.com/jimallen/TasksAgent.git
 cd TasksAgent/obsidian-plugin
 
 # Install dependencies
@@ -260,9 +260,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/TasksAgent/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/TasksAgent/discussions)
-- **Wiki**: [Plugin Wiki](https://github.com/yourusername/TasksAgent/wiki)
+- **Issues**: [GitHub Issues](https://github.com/jimallen/TasksAgent/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/jimallen/TasksAgent/discussions)
+- **Wiki**: [Plugin Wiki](https://github.com/jimallen/TasksAgent/wiki)
 
 ## License
 

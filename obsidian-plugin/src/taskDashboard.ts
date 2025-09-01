@@ -1011,65 +1011,112 @@ export class TaskDashboardView extends ItemView {
   }
   
   private hasTasksDueToday(card: HTMLElement): boolean {
-    const dueDates = card.querySelectorAll('.task-due');
+    // Check if this is a completed card - never show completed cards for date filters
+    if (card.classList.contains('completed-card')) {
+      return false;
+    }
+    
+    const taskItems = card.querySelectorAll('.task-list-item');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    for (const elem of Array.from(dueDates)) {
-      const dateText = elem.textContent?.match(/\d{4}-\d{2}-\d{2}/);
-      if (dateText) {
-        const dueDate = new Date(dateText[0]);
-        if (dueDate >= today && dueDate < tomorrow) {
-          return true;
+    for (const item of Array.from(taskItems)) {
+      // Skip if task is completed
+      const checkbox = item.querySelector('.task-checkbox') as HTMLInputElement;
+      if (checkbox && checkbox.checked) {
+        continue;
+      }
+      
+      // Look for due date in the task metadata
+      const dueDateElem = item.querySelector('.task-due');
+      if (dueDateElem) {
+        const dateText = dueDateElem.textContent?.match(/\d{4}-\d{2}-\d{2}/);
+        if (dateText) {
+          const dueDate = new Date(dateText[0] + 'T00:00:00');
+          dueDate.setHours(0, 0, 0, 0);
+          
+          if (dueDate >= today && dueDate < tomorrow) {
+            return true; // Found at least one task due today
+          }
         }
       }
     }
+    
     return false;
   }
   
   private hasTasksDueThisWeek(card: HTMLElement): boolean {
-    const dueDates = card.querySelectorAll('.task-due');
+    // Check if this is a completed card - never show completed cards for date filters
+    if (card.classList.contains('completed-card')) {
+      return false;
+    }
+    
+    const taskItems = card.querySelectorAll('.task-list-item');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekFromNow = new Date(today);
     weekFromNow.setDate(weekFromNow.getDate() + 7);
     
-    for (const elem of Array.from(dueDates)) {
-      const dateText = elem.textContent?.match(/\d{4}-\d{2}-\d{2}/);
-      if (dateText) {
-        const dueDate = new Date(dateText[0]);
-        if (dueDate >= today && dueDate <= weekFromNow) {
-          return true;
-        }
+    for (const item of Array.from(taskItems)) {
+      // Skip if task is completed
+      const checkbox = item.querySelector('.task-checkbox') as HTMLInputElement;
+      if (checkbox && checkbox.checked) {
+        continue;
       }
-    }
-    return false;
-  }
-  
-  private hasTasksOverdue(card: HTMLElement): boolean {
-    const dueDates = card.querySelectorAll('.task-due');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    for (const elem of Array.from(dueDates)) {
-      const dateText = elem.textContent?.match(/\d{4}-\d{2}-\d{2}/);
-      if (dateText) {
-        const dueDate = new Date(dateText[0]);
-        // Check if the task is overdue (past due date)
-        if (dueDate < today) {
-          // Also check if the task is not completed
-          const taskItem = elem.closest('.task-list-item');
-          if (taskItem) {
-            const checkbox = taskItem.querySelector('.task-checkbox') as HTMLInputElement;
-            if (checkbox && !checkbox.checked) {
-              return true;
-            }
+      
+      // Look for due date in the task metadata
+      const dueDateElem = item.querySelector('.task-due');
+      if (dueDateElem) {
+        const dateText = dueDateElem.textContent?.match(/\d{4}-\d{2}-\d{2}/);
+        if (dateText) {
+          const dueDate = new Date(dateText[0] + 'T00:00:00');
+          dueDate.setHours(0, 0, 0, 0);
+          
+          if (dueDate >= today && dueDate <= weekFromNow) {
+            return true; // Found at least one task due this week
           }
         }
       }
     }
+    
+    return false;
+  }
+  
+  private hasTasksOverdue(card: HTMLElement): boolean {
+    // Check if this is a completed card - never show completed cards for overdue filter
+    if (card.classList.contains('completed-card')) {
+      return false;
+    }
+    
+    const taskItems = card.querySelectorAll('.task-list-item');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    for (const item of Array.from(taskItems)) {
+      // Skip if task is completed
+      const checkbox = item.querySelector('.task-checkbox') as HTMLInputElement;
+      if (checkbox && checkbox.checked) {
+        continue;
+      }
+      
+      // Look for due date in the task metadata
+      const dueDateElem = item.querySelector('.task-due');
+      if (dueDateElem) {
+        const dateText = dueDateElem.textContent?.match(/\d{4}-\d{2}-\d{2}/);
+        if (dateText) {
+          const dueDate = new Date(dateText[0] + 'T00:00:00');
+          dueDate.setHours(0, 0, 0, 0);
+          
+          // Check if the task is overdue (past due date)
+          if (dueDate < today) {
+            return true; // Found at least one overdue task
+          }
+        }
+      }
+    }
+    
     return false;
   }
 

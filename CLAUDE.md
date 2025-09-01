@@ -154,6 +154,13 @@ Edit `src/database/schema.sql`:
 
 ## Recent Updates
 
+### Systemd Service Improvements (2025-09-01)
+- **Dynamic Service Configuration**: Install script now generates service file based on user's vault path
+- **User Detection Fix**: Proper handling of $SUDO_USER to avoid root installation
+- **Security Enhancements**: Service file grants write access only to specific vault directory
+- **Build Process**: npm build runs as correct user, not root
+- **Installation UX**: Interactive prompt for Obsidian vault path during install
+
 ### API Key Integration (2025-08-30)
 - **Plugin-to-Daemon Communication**: API key now passed from plugin settings
 - **Dynamic Configuration**: No need for .env file API key
