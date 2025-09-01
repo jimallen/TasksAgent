@@ -227,11 +227,17 @@ npm run daemon:headless  # No UI, quiet mode
 ### 3. Systemd Service (Linux)
 ```bash
 # Install service with dynamic vault configuration
-sudo ./scripts/install-service.sh
+sudo npm run daemon:install
 # Script will prompt for Obsidian vault path or read from .env
 
 # Start the service
 sudo systemctl start meeting-transcript-agent@$USER
+
+# Enable auto-start on boot
+sudo systemctl enable meeting-transcript-agent@$USER
+
+# Uninstall the service
+sudo npm run daemon:uninstall
 ```
 
 ### 4. Docker Container
@@ -340,6 +346,46 @@ TZ=America/New_York
 - **Tasks**: 100,000+ tasks in database
 - **Concurrent Requests**: Single-threaded by design
 - **Multi-user**: Requires separate instances
+
+## Systemd Service Installation
+
+### Dynamic Configuration
+The installation script (`scripts/install-service.sh`) provides intelligent service configuration:
+
+1. **User Detection**: Uses `$SUDO_USER` to properly identify the actual user (not root)
+2. **Vault Path Discovery**: 
+   - First checks `.env` file for `OBSIDIAN_VAULT_PATH`
+   - Prompts interactively if not found
+   - Validates the path exists
+3. **Service File Generation**: Creates a custom systemd service file with:
+   - Specific `ReadWritePaths` for the user's vault
+   - Proper security restrictions (`ProtectSystem`, `ProtectHome`)
+   - User-specific working directory
+4. **Build Process**: Runs `npm run build` as the correct user, not root
+
+### Service Management Commands
+```bash
+# Install (prompts for vault path)
+sudo npm run daemon:install
+
+# Start/stop/restart
+sudo systemctl start meeting-transcript-agent@$USER
+sudo systemctl stop meeting-transcript-agent@$USER
+sudo systemctl restart meeting-transcript-agent@$USER
+
+# View logs
+sudo journalctl -u meeting-transcript-agent@$USER -f
+
+# Check status
+sudo systemctl status meeting-transcript-agent@$USER
+
+# Enable/disable auto-start
+sudo systemctl enable meeting-transcript-agent@$USER
+sudo systemctl disable meeting-transcript-agent@$USER
+
+# Uninstall completely
+sudo npm run daemon:uninstall
+```
 
 ## Security Considerations
 

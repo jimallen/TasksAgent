@@ -160,6 +160,8 @@ Edit `src/database/schema.sql`:
 - **Security Enhancements**: Service file grants write access only to specific vault directory
 - **Build Process**: npm build runs as correct user, not root
 - **Installation UX**: Interactive prompt for Obsidian vault path during install
+- **NPM Scripts**: Added `daemon:install` and `daemon:uninstall` for easy service management
+- **Uninstall Script**: Clean removal of systemd service with proper cleanup
 
 ### API Key Integration (2025-08-30)
 - **Plugin-to-Daemon Communication**: API key now passed from plugin settings
