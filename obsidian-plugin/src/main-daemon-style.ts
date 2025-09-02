@@ -362,11 +362,6 @@ export default class MeetingTasksPlugin extends Plugin {
       this.openTaskDashboard();
     });
     
-    // Add reset ribbon icon
-    this.addRibbonIcon('refresh-cw', 'Reset processed emails', async () => {
-      await this.resetProcessedEmails();
-    });
-    
     // Initialize services
     await this.initializeServices();
     

@@ -336,7 +336,6 @@ Cmd/Ctrl + Shift + M                 # Quick trigger email processing
 
 # Ribbon Icons
 Dashboard icon                        # Open task dashboard
-Refresh icon                          # Process emails
 ```
 
 ### TUI Dashboard Controls
