@@ -160,6 +160,13 @@ Edit `src/database/schema.sql`:
 - **File Changed**: `src/extractors/claudeTaskExtractor.ts`
 - **Impact**: Obsidian plugin API key now properly used for Claude AI extraction
 
+### Obsidian Plugin Command Enhancements (2025-09-02)
+- **Command Palette**: Added emoji-prefixed commands for better visibility
+- **Keyboard Shortcut**: `Cmd/Ctrl + Shift + M` for quick email processing
+- **Quick Process Command**: 24-hour lookback for recent emails only
+- **Improved Notifications**: Detailed feedback with proper pluralization
+- **Status Bar Updates**: Real-time processing status display
+
 ### Service Update Enhancements (2025-09-02)
 - **New Update Script**: `scripts/update-service.sh` for code-only updates
 - **Install Script**: Enhanced with auto-restart if service is running

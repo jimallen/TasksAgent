@@ -311,10 +311,16 @@ export default class MeetingTasksPlugin extends Plugin {
     // Add commands
     this.addCommand({
       id: 'process-meeting-emails',
-      name: 'Process meeting emails and extract tasks',
+      name: '📧 Process meeting emails now',
       callback: async () => {
         await this.processEmails();
-      }
+      },
+      hotkeys: [
+        {
+          modifiers: ['Mod', 'Shift'],
+          key: 'M'
+        }
+      ]
     });
     
     this.addCommand({
@@ -322,6 +328,18 @@ export default class MeetingTasksPlugin extends Plugin {
       name: 'Open task dashboard',
       callback: () => {
         this.openTaskDashboard();
+      }
+    });
+    
+    this.addCommand({
+      id: 'quick-process-emails',
+      name: '⚡ Quick process (last 24 hours)',
+      callback: async () => {
+        // Temporarily set lookback to 24 hours
+        const originalLookback = this.settings.lookbackHours;
+        this.settings.lookbackHours = 24;
+        await this.processEmails();
+        this.settings.lookbackHours = originalLookback;
       }
     });
     
@@ -392,8 +410,8 @@ export default class MeetingTasksPlugin extends Plugin {
     });
     
     try {
-      this.updateStatus('Processing...');
-      new Notice('Triggering email processing...');
+      this.updateStatus('Processing emails...');
+      new Notice(`🔄 Searching for meeting emails from the last ${this.settings.lookbackHours} hours...`);
       
       // Try to trigger the daemon via HTTP with quiet mode
       const daemonUrl = 'http://localhost:3002/trigger';
@@ -415,8 +433,21 @@ export default class MeetingTasksPlugin extends Plugin {
         
         if (response.status === 200) {
           const result = response.json;
-          new Notice(`✅ Processed: ${result.emailsProcessed || 0} emails, ${result.tasksExtracted || 0} tasks extracted`);
-          this.updateStatus('Processing complete');
+          const emailCount = result.emailsProcessed || 0;
+          const taskCount = result.tasksExtracted || 0;
+          const noteCount = result.notesCreated || 0;
+          
+          if (emailCount === 0) {
+            new Notice(`📭 No new meeting emails found`);
+            this.updateStatus('No new emails');
+          } else if (taskCount === 0) {
+            new Notice(`📧 Processed ${emailCount} email${emailCount !== 1 ? 's' : ''} - No tasks found`);
+            this.updateStatus('No tasks found');
+          } else {
+            new Notice(`✅ Success! Found ${taskCount} task${taskCount !== 1 ? 's' : ''} from ${emailCount} email${emailCount !== 1 ? 's' : ''}`);
+            this.updateStatus(`${taskCount} tasks extracted`);
+          }
+          
           return;
         }
       } catch (daemonError) {

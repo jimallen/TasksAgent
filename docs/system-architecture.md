@@ -456,6 +456,12 @@ curl http://localhost:3002/status
 - **Impact**: Enables proper API key passing from Obsidian plugin
 - **Result**: Claude AI extraction now works when triggered from plugin
 
+### Obsidian Plugin Command Improvements (2025-09-02)
+- **User Experience**: Enhanced command palette with emoji icons and better naming
+- **Quick Access**: Added keyboard shortcut `Cmd/Ctrl + Shift + M`
+- **Quick Process**: New 24-hour processing command for recent emails
+- **Feedback**: Improved notifications with counts and status updates
+
 ### Service Update Scripts (2025-09-02)
 - **New Script**: `scripts/update-service.sh` for code updates without full reinstall
 - **Install Enhancement**: Auto-restart service if running during install
