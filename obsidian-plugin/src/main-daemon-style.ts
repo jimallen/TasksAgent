@@ -115,7 +115,7 @@ class GmailMcpHttpService {
     }
   }
   
-  async getEmailContent(emailId: string): Promise<string> {
+  async readEmail(emailId: string): Promise<any> {
     if (!this.connected) {
       throw new Error('Not connected to Gmail MCP service');
     }
@@ -139,15 +139,22 @@ class GmailMcpHttpService {
       }
       
       if (data.success && data.email) {
-        // Return the email body if available, otherwise return the whole email object as string
-        return data.email.body || JSON.stringify(data.email);
+        return data.email;
       }
       
-      return '';
+      return null;
     } catch (error) {
-      console.error('Failed to get email content:', error);
-      return '';
+      console.error('Failed to read email:', error);
+      return null;
     }
+  }
+  
+  async getEmailContent(emailId: string): Promise<string> {
+    const email = await this.readEmail(emailId);
+    if (email) {
+      return email.body || JSON.stringify(email);
+    }
+    return '';
   }
   
   /**
@@ -348,6 +355,14 @@ export default class MeetingTasksPlugin extends Plugin {
       name: 'Reset processed emails',
       callback: async () => {
         await this.resetProcessedEmails();
+      }
+    });
+    
+    this.addCommand({
+      id: 'reprocess-meeting-note',
+      name: '🔄 Reprocess current meeting note',
+      callback: async () => {
+        await this.reprocessCurrentMeetingNote();
       }
     });
     
@@ -823,6 +838,104 @@ created: ${new Date().toISOString()}
       ...this.settings,
       processedEmails: Array.from(this.processedEmails)
     });
+  }
+  
+  async reprocessCurrentMeetingNote() {
+    try {
+      // Get the active file
+      const activeFile = this.app.workspace.getActiveFile();
+      
+      if (!activeFile) {
+        new Notice('No active file. Please open a meeting note to reprocess.');
+        return;
+      }
+      
+      // Check if this is a meeting note (in the meetings folder or has meeting frontmatter)
+      const content = await this.app.vault.read(activeFile);
+      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      
+      if (!frontmatterMatch) {
+        new Notice('This file does not appear to be a meeting note (no frontmatter).');
+        return;
+      }
+      
+      // Parse frontmatter to get email ID
+      const frontmatter = frontmatterMatch[1];
+      const emailIdMatch = frontmatter.match(/emailId:\s*(.+)/);
+      
+      if (!emailIdMatch || !emailIdMatch[1]) {
+        new Notice('No email ID found in this meeting note. Cannot reprocess.');
+        return;
+      }
+      
+      const emailId = emailIdMatch[1].trim();
+      
+      // Confirm with user
+      const confirmed = confirm(`Reprocess Meeting Note?\n\nThis will fetch the original email and regenerate the summary and tasks.\n\nEmail ID: ${emailId}`);
+      
+      if (!confirmed) {
+        return;
+      }
+      
+      this.updateStatus('Reprocessing...');
+      new Notice('Fetching original email...');
+      
+      // Ensure Gmail is connected
+      if (!this.gmailService || !this.gmailService.isConnected()) {
+        new Notice('Gmail not connected. Reconnecting...');
+        await this.initializeServices();
+        
+        if (!this.gmailService || !this.gmailService.isConnected()) {
+          new Notice('Failed to connect to Gmail MCP');
+          this.updateStatus('Gmail offline');
+          return;
+        }
+      }
+      
+      // Fetch the specific email by ID
+      const email = await this.gmailService.readEmail(emailId);
+      
+      if (!email) {
+        new Notice('Could not find the original email. It may have been deleted.');
+        this.updateStatus('Ready');
+        return;
+      }
+      
+      new Notice('Extracting tasks and summary...');
+      
+      // Get email content
+      const emailContent = email.body || email.snippet || '';
+      
+      // Extract tasks using Claude (or fallback)
+      let extraction: TaskExtractionResult;
+      
+      if (this.claudeExtractor && this.settings.anthropicApiKey) {
+        console.log('Reprocessing with Claude...');
+        extraction = await this.claudeExtractor.extractTasks(emailContent, email.subject);
+        console.log(`Extracted ${extraction.tasks.length} tasks with ${extraction.confidence}% confidence`);
+      } else {
+        console.log('Using fallback extraction for reprocessing');
+        extraction = this.fallbackTaskExtraction(emailContent, email.subject);
+      }
+      
+      // Format the new content
+      const newContent = this.formatMeetingNote(email, extraction);
+      
+      // Replace the file content
+      await this.app.vault.modify(activeFile, newContent);
+      
+      // Update stats
+      const taskCount = extraction.tasks.length;
+      const highPriorityCount = extraction.tasks.filter(t => t.priority === 'high').length;
+      
+      this.updateStatus(`Reprocessed: ${taskCount} tasks`);
+      new Notice(`✅ Reprocessed successfully! Found ${taskCount} task${taskCount !== 1 ? 's' : ''} (${highPriorityCount} high priority)`);
+      
+    } catch (error) {
+      console.error('Failed to reprocess meeting note:', error);
+      new Notice(`Error reprocessing: ${error.message}`);
+      this.updateStatus('Error');
+    }
   }
   
   async resetProcessedEmails() {
