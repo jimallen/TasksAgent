@@ -31,7 +31,21 @@ fi
 
 echo "Building the project as user ${USER_NAME}..."
 cd "${PROJECT_DIR}"
-sudo -u ${USER_NAME} npm run build
+
+# Ensure npm dependencies are installed
+if [ ! -d "node_modules" ]; then
+    echo "Installing npm dependencies..."
+    sudo -u ${USER_NAME} npm install
+fi
+
+# Build the project
+if ! sudo -u ${USER_NAME} npm run build; then
+    echo "Error: Failed to build the project"
+    echo "Please fix any TypeScript errors and run the script again"
+    exit 1
+fi
+
+echo "Build completed successfully!"
 
 echo "Creating log directory..."
 mkdir -p "${PROJECT_DIR}/logs"
@@ -111,6 +125,15 @@ systemctl daemon-reload
 
 echo "Enabling service..."
 systemctl enable "${SERVICE_NAME}"
+
+# Check if service is currently running and restart it to pick up code changes
+if systemctl is-active --quiet "${SERVICE_NAME}"; then
+    echo "Service is currently running. Restarting to apply code changes..."
+    systemctl restart "${SERVICE_NAME}"
+    echo "Service restarted successfully!"
+else
+    echo "Service is not currently running."
+fi
 
 echo ""
 echo "Service installed successfully!"

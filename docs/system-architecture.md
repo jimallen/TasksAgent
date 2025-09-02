@@ -450,6 +450,18 @@ curl http://localhost:3002/status
 
 ## Recent Enhancements
 
+### API Key Runtime Checking Fix (2025-09-02)
+- **Issue**: ClaudeTaskExtractor singleton created at module load, missing dynamic API keys
+- **Fix**: Modified to check API key at runtime via `getApiKey()` method
+- **Impact**: Enables proper API key passing from Obsidian plugin
+- **Result**: Claude AI extraction now works when triggered from plugin
+
+### Service Update Scripts (2025-09-02)
+- **New Script**: `scripts/update-service.sh` for code updates without full reinstall
+- **Install Enhancement**: Auto-restart service if running during install
+- **Build Verification**: Added error handling for TypeScript compilation
+- **NPM Command**: `npm run daemon:update` for easy updates
+
 ### Systemd Service Improvements (2025-09-01)
 - **Dynamic Vault Configuration**: Install script now prompts for vault path
 - **User Detection**: Proper handling of sudo user (uses $SUDO_USER not root)

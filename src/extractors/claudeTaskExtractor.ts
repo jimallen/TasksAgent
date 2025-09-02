@@ -24,22 +24,28 @@ export interface TaskExtractionResult {
 }
 
 export class ClaudeTaskExtractor {
-  private apiKey: string;
   private apiUrl: string;
   private model: string;
 
   constructor() {
     // Get from environment or config
-    this.apiKey = process.env['ANTHROPIC_API_KEY'] || '';
     this.apiUrl = process.env['CLAUDE_API_URL'] || 'https://api.anthropic.com/v1/messages';
     this.model = process.env['CLAUDE_MODEL'] || 'claude-3-haiku-20240307';
+  }
+
+  /**
+   * Get API key at runtime to support dynamic setting
+   */
+  private getApiKey(): string {
+    return process.env['ANTHROPIC_API_KEY'] || '';
   }
 
   /**
    * Extract tasks using Claude API
    */
   async extractTasks(transcript: TranscriptContent): Promise<TaskExtractionResult> {
-    if (!this.apiKey) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
       logWarn('No Claude API key found, using fallback extraction');
       return this.fallbackExtraction(transcript);
     }
@@ -104,6 +110,11 @@ Return ONLY valid JSON, no other text:`;
    * Call Claude API
    */
   private async callClaude(prompt: string): Promise<string> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key available');
+    }
+    
     try {
       const response = await axios.post(
         this.apiUrl,
@@ -121,7 +132,7 @@ Return ONLY valid JSON, no other text:`;
         },
         {
           headers: {
-            'x-api-key': this.apiKey,
+            'x-api-key': apiKey,
             'anthropic-version': '2023-06-01',
             'content-type': 'application/json'
           },

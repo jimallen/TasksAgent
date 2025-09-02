@@ -18,6 +18,7 @@
     "daemon:build": "npm run build && node dist/daemon.js",
     "daemon:install": "./scripts/install-service.sh",
     "daemon:uninstall": "./scripts/uninstall-service.sh",
+    "daemon:update": "./scripts/update-service.sh",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "format": "prettier --write .",

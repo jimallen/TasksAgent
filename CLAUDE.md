@@ -154,6 +154,19 @@ Edit `src/database/schema.sql`:
 
 ## Recent Updates
 
+### API Key Runtime Checking Fix (2025-09-02)
+- **Problem Solved**: ClaudeTaskExtractor singleton was missing dynamic API keys from plugin
+- **Implementation**: Modified extractor to check environment at runtime, not constructor
+- **File Changed**: `src/extractors/claudeTaskExtractor.ts`
+- **Impact**: Obsidian plugin API key now properly used for Claude AI extraction
+
+### Service Update Enhancements (2025-09-02)
+- **New Update Script**: `scripts/update-service.sh` for code-only updates
+- **Install Script**: Enhanced with auto-restart if service is running
+- **Error Handling**: Build failures now properly caught and reported
+- **NPM Scripts**: Added `daemon:update` for convenient updates
+- **Benefit**: Easy code updates without full service reinstallation
+
 ### Systemd Service Improvements (2025-09-01)
 - **Dynamic Service Configuration**: Install script now generates service file based on user's vault path
 - **User Detection Fix**: Proper handling of $SUDO_USER to avoid root installation
