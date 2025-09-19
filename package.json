@@ -79,7 +79,6 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@gongrzhe/server-gmail-autoauth-mcp": "^1.1.11",
     "@google-cloud/local-auth": "^3.0.1",
     "@modelcontextprotocol/sdk": "^1.17.3",
     "@types/better-sqlite3": "^7.6.13",

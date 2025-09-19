@@ -10,6 +10,82 @@ interface ToolCallResult {
   error?: string;
 }
 
+// Google Workspace MCP specific interfaces
+interface GoogleWorkspaceToolCallRequest {
+  name: string;
+  arguments: Record<string, any>;
+}
+
+interface GoogleWorkspaceToolCallResponse {
+  content?: Array<{ type: string; text: string }>;
+  isError?: boolean;
+  error?: string;
+}
+
+// Tool name mappings from old Gmail MCP to Google Workspace MCP
+const TOOL_MAPPINGS: Record<string, string> = {
+  'search_emails': 'search_gmail_messages',
+  'read_email': 'get_gmail_message_content',
+  'modify_email': 'modify_gmail_message_labels'
+};
+
+// Adapter to transform request parameters
+function adaptToolRequest(toolName: string, args: Record<string, any>): GoogleWorkspaceToolCallRequest {
+  const mappedTool = TOOL_MAPPINGS[toolName] || toolName;
+  const adaptedArgs: Record<string, any> = { ...args };
+
+  // Add required user_google_email parameter for all Gmail tools
+  if (mappedTool.includes('gmail')) {
+    // Try to get email from environment or use default
+    adaptedArgs['user_google_email'] = process.env['GMAIL_USER_EMAIL'] || 'me@gmail.com';
+  }
+
+  // Adapt search_emails -> search_gmail_messages parameters
+  if (toolName === 'search_emails') {
+    if ('maxResults' in adaptedArgs) {
+      adaptedArgs['page_size'] = adaptedArgs['maxResults'];
+      delete adaptedArgs['maxResults'];
+    }
+  }
+
+  // Adapt read_email -> get_gmail_message_content parameters
+  if (toolName === 'read_email') {
+    if ('messageId' in adaptedArgs) {
+      adaptedArgs['message_id'] = adaptedArgs['messageId'];
+      delete adaptedArgs['messageId'];
+    }
+    adaptedArgs['include_body'] = true;
+  }
+
+  // Adapt modify_email -> modify_gmail_message_labels parameters
+  if (toolName === 'modify_email') {
+    if ('messageId' in adaptedArgs) {
+      adaptedArgs['message_id'] = adaptedArgs['messageId'];
+      delete adaptedArgs['messageId'];
+    }
+    if ('addLabels' in adaptedArgs) {
+      adaptedArgs['add_labels'] = adaptedArgs['addLabels'];
+      delete adaptedArgs['addLabels'];
+    }
+    if ('removeLabels' in adaptedArgs) {
+      adaptedArgs['remove_labels'] = adaptedArgs['removeLabels'];
+      delete adaptedArgs['removeLabels'];
+    }
+  }
+
+  return {
+    name: mappedTool,
+    arguments: adaptedArgs
+  };
+}
+
+// Adapter to transform response format
+function adaptToolResponse(response: GoogleWorkspaceToolCallResponse): ToolCallResult {
+  // Google Workspace MCP returns content in a more structured format
+  // We need to maintain compatibility with the existing text parsing logic
+  return response as ToolCallResult;
+}
+
 export interface EmailMessage {
   id: string;
   threadId: string;
@@ -178,18 +254,19 @@ export class GmailService {
       const searchQuery = this.buildSearchQuery(query);
       logDebug(`Searching emails with query: ${searchQuery}`);
 
-      const result = await this.client!.callTool({
-        name: 'search_emails',
-        arguments: {
-          query: searchQuery,
-          maxResults: 50,
-        }
-      }) as unknown as ToolCallResult;
+      // Adapt request for Google Workspace MCP
+      const adaptedRequest = adaptToolRequest('search_emails', {
+        query: searchQuery,
+        maxResults: 50,
+      });
+
+      const result = await this.client!.callTool(adaptedRequest as any) as unknown as GoogleWorkspaceToolCallResponse;
+      const adaptedResult = adaptToolResponse(result);
 
       // Log the result to debug
-      logDebug('Search result:', result);
+      logDebug('Search result:', adaptedResult);
 
-      if (!result.content || (result.content as unknown[]).length === 0) {
+      if (!adaptedResult.content || (adaptedResult.content as unknown[]).length === 0) {
         logInfo('No emails found matching the search criteria');
         return [];
       }
@@ -197,15 +274,15 @@ export class GmailService {
       // Parse the text format returned by Gmail MCP
       const emails: EmailMessage[] = [];
       
-      // Gmail MCP returns results as text in this format:
-      // ID: xxx\nSubject: xxx\nFrom: xxx\nDate: xxx\n\n
+      // Google Workspace MCP returns results in a structured format
+      // Parse the text content from the response
       let textContent = '';
-      if (Array.isArray(result.content) && result.content[0] && typeof result.content[0] === 'object' && 'text' in result.content[0]) {
-        textContent = (result.content[0] as { text: string }).text;
-      } else if (typeof result.content === 'string') {
-        textContent = result.content;
+      if (Array.isArray(adaptedResult.content) && adaptedResult.content[0] && typeof adaptedResult.content[0] === 'object' && 'text' in adaptedResult.content[0]) {
+        textContent = (adaptedResult.content[0] as { text: string }).text;
+      } else if (typeof adaptedResult.content === 'string') {
+        textContent = adaptedResult.content;
       } else {
-        logError('Unexpected result format:', result);
+        logError('Unexpected result format:', adaptedResult);
         return [];
       }
       
@@ -215,31 +292,27 @@ export class GmailService {
         return [];
       }
 
-      // Parse the text format
-      const emailBlocks = textContent.split('\n\n').filter(block => block.trim());
-      
-      for (const block of emailBlocks) {
-        const lines = block.split('\n');
-        const emailData: any = {};
-        
-        for (const line of lines) {
-          if (line.startsWith('ID: ')) {
-            emailData.id = line.substring(4);
-          } else if (line.startsWith('Subject: ')) {
-            emailData.subject = line.substring(9);
-          } else if (line.startsWith('From: ')) {
-            emailData.from = line.substring(6);
-          } else if (line.startsWith('Date: ')) {
-            emailData.date = line.substring(6);
+      // Parse Google Workspace MCP response format
+      // The new format includes Message ID and Thread ID
+      const lines = textContent.split('\n');
+      const messageIds: string[] = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]?.trim() || '';
+        // Look for Message ID lines in the new format
+        if (line.match(/^\d+\. Message ID: /)) {
+          const id = line.substring(line.indexOf('Message ID: ') + 12);
+          if (id && id !== 'unknown') {
+            messageIds.push(id);
           }
         }
-        
-        if (emailData.id) {
-          // For now, we need to fetch the full email details
-          const fullEmail = await this.readEmail(emailData.id);
-          if (fullEmail) {
-            emails.push(fullEmail);
-          }
+      }
+
+      // Fetch full email details for each message ID
+      for (const messageId of messageIds) {
+        const fullEmail = await this.readEmail(messageId);
+        if (fullEmail) {
+          emails.push(fullEmail);
         }
       }
 
@@ -310,24 +383,25 @@ export class GmailService {
     try {
       logDebug(`Reading email ${emailId}`);
 
-      const result = await this.client!.callTool({
-        name: 'read_email',
-        arguments: {
-          messageId: emailId,  // read_email takes a single messageId, not an array
-        }
-      }) as unknown as ToolCallResult;
+      // Adapt request for Google Workspace MCP
+      const adaptedRequest = adaptToolRequest('read_email', {
+        messageId: emailId,  // Will be converted to message_id
+      });
 
-      if (!result.content || (result.content as unknown[]).length === 0) {
+      const result = await this.client!.callTool(adaptedRequest as any) as unknown as GoogleWorkspaceToolCallResponse;
+      const adaptedResult = adaptToolResponse(result);
+
+      if (!adaptedResult.content || (adaptedResult.content as unknown[]).length === 0) {
         logWarn(`Email ${emailId} not found`);
         return null;
       }
 
-      // Parse the email content - Gmail MCP returns full email details
+      // Parse the email content - Google Workspace MCP returns structured format
       let emailContent = '';
-      if (Array.isArray(result.content) && result.content[0] && typeof result.content[0] === 'object' && 'text' in result.content[0]) {
-        emailContent = (result.content[0] as { text: string }).text;
-      } else if (typeof result.content === 'string') {
-        emailContent = result.content;
+      if (Array.isArray(adaptedResult.content) && adaptedResult.content[0] && typeof adaptedResult.content[0] === 'object' && 'text' in adaptedResult.content[0]) {
+        emailContent = (adaptedResult.content[0] as { text: string }).text;
+      } else if (typeof adaptedResult.content === 'string') {
+        emailContent = adaptedResult.content;
       }
 
       // Parse email content and create EmailMessage
@@ -367,35 +441,19 @@ export class GmailService {
 
   /**
    * Download attachment from an email
+   * NOTE: Google Workspace MCP doesn't currently support attachment downloads
+   * This will need to be implemented in Phase 2
    */
   async downloadAttachment(messageId: string, attachmentId: string): Promise<Buffer> {
     await this.ensureConnected();
 
     try {
-      logDebug(`Downloading attachment ${attachmentId} from email ${messageId}`);
+      logWarn(`Attachment download not yet supported in Google Workspace MCP`);
+      logWarn(`Attachment ${attachmentId} from email ${messageId} cannot be downloaded`);
 
-      const result = await this.client!.callTool({
-        name: 'read_email',
-        arguments: {
-          messageId,
-          attachmentId,
-        }
-      });
-
-      if (!result.content || (result.content as unknown[]).length === 0) {
-        throw new Error('No attachment data received');
-      }
-
-      // The attachment data should be base64 encoded
-      const attachmentData = (result.content as Array<{ text: string }>)[0]?.text;
-      if (!attachmentData) {
-        logWarn('No attachment data found');
-        throw new Error('No attachment data found');
-      }
-      const buffer = Buffer.from(attachmentData, 'base64');
-
-      logDebug(`Downloaded attachment: ${buffer.length} bytes`);
-      return buffer;
+      // Return empty buffer for now to avoid breaking the flow
+      // TODO: Implement attachment download in Phase 2
+      return Buffer.from('');
     } catch (error) {
       logError(`Failed to download attachment ${attachmentId}`, error);
       throw error;
@@ -411,13 +469,13 @@ export class GmailService {
     try {
       logDebug(`Marking email ${emailId} as read`);
 
-      await this.client!.callTool({
-        name: 'modify_email',
-        arguments: {
-          messageId: emailId,
-          removeLabels: ['UNREAD'],
-        }
+      // Adapt request for Google Workspace MCP
+      const adaptedRequest = adaptToolRequest('modify_email', {
+        messageId: emailId,
+        removeLabels: ['UNREAD'],
       });
+
+      await this.client!.callTool(adaptedRequest as any);
 
       logDebug(`Email ${emailId} marked as read`);
     } catch (error) {
@@ -435,13 +493,13 @@ export class GmailService {
     try {
       logDebug(`Adding label '${label}' to email ${emailId}`);
 
-      await this.client!.callTool({
-        name: 'modify_email',
-        arguments: {
-          messageId: emailId,
-          addLabels: [label],
-        }
+      // Adapt request for Google Workspace MCP
+      const adaptedRequest = adaptToolRequest('modify_email', {
+        messageId: emailId,
+        addLabels: [label],
       });
+
+      await this.client!.callTool(adaptedRequest as any);
 
       logDebug(`Label '${label}' added to email ${emailId}`);
     } catch (error) {

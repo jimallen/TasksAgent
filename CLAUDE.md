@@ -64,8 +64,9 @@ The system now uses a single unified daemon with integrated Gmail MCP:
   - HTTP Server: Default 3002 (--http-port or HTTP_SERVER_PORT)
   - Gmail MCP: Default 3000 (--gmail-mcp-port or GMAIL_MCP_PORT)
 - **HTTP API Endpoints**:
-  - `/health`, `/status`, `/trigger` - Daemon control endpoints
-  - `/gmail/*` - Gmail MCP proxy endpoints (integrated)
+  - `/health` - Health check endpoint for monitoring
+  - `/status` - Daemon status and statistics
+  - `/trigger` - External trigger for email processing (used by Obsidian plugin)
 - **Single Service**: `npm run daemon` starts everything
 
 ### Daemon Service Architecture
@@ -213,13 +214,20 @@ Edit `src/database/schema.sql`:
 - Check lookback hours in Obsidian plugin settings (passed to daemon)
 - Verify enabled meeting platforms in plugin settings
 - Verify patterns in `src/parsers/emailParser.ts`
-- Gmail MCP tools: `search_emails`, `read_email` (not `gmail_*` prefixed)
-- Ensure Gmail MCP HTTP server is running on port 3000
+- Check Gmail MCP service is running: `npm run daemon`
+- Verify OAuth credentials in `~/.gmail-mcp/` or `~/.celebrate-oracle/`
 
 ### Claude API Issues
 - Verify `ANTHROPIC_API_KEY` in .env
 - Check rate limits (default: 3 retries with exponential backoff)
 - Model defaults to `claude-3-haiku-20240307`
+
+### Attachment Downloads Not Working (Google Workspace MCP)
+- **Known Limitation**: Google Workspace MCP doesn't support attachment downloads
+- **Workaround**: System processes inline email content instead
+- **Impact**: PDF/document transcripts cannot be processed
+- **Phase 2 Plan**: Direct Gmail API integration for attachments
+- **See**: `docs/attachment-handling-limitation.md` for details
 
 ### Desktop Notifications Failing
 - Linux: Install `libnotify-bin` package

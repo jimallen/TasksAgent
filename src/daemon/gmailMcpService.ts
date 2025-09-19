@@ -34,24 +34,25 @@ export class GmailMcpService extends EventEmitter {
   private initializePromise: Promise<void> | null = null;
   private port: number = 0;
 
+  // Tool mapping for Google Workspace MCP
+  private readonly TOOL_MAP: Record<string, string> = {
+    'search_emails': 'search_gmail_messages',
+    'read_email': 'get_gmail_message_content'
+  };
+
   /**
    * Creates a new GmailMcpService instance
    * @param config - Gmail MCP configuration
    */
   constructor(config?: Partial<GmailMcpConfig>) {
     super();
-    
-    // Initialize with defaults and expand auth path
-    const authPath = config?.authPath ?? '~/.gmail-mcp/';
-    const expandedAuthPath = authPath.startsWith('~') 
-      ? path.join(os.homedir(), authPath.substring(1))
-      : authPath;
-    
+
+    // Initialize with defaults (adjusted for Python processes)
     this.config = {
       restartAttempts: config?.restartAttempts ?? 3,
-      startupTimeout: config?.startupTimeout ?? 10000,
+      startupTimeout: config?.startupTimeout ?? 15000, // 15 seconds for Python startup
       requestTimeout: config?.requestTimeout ?? 30000,
-      authPath: expandedAuthPath,
+      mcpPath: config?.mcpPath ?? process.env['GOOGLE_WORKSPACE_MCP_PATH'],
     };
 
     // Initialize status
@@ -123,22 +124,49 @@ export class GmailMcpService extends EventEmitter {
         const childEnv = {
           ...process.env,
           NODE_ENV: process.env['NODE_ENV'] || 'production',
-          // Pass the configured port to the Gmail MCP server
-          // Gmail MCP may check different environment variables
+          // Pass the configured port to the Google Workspace MCP server
           PORT: this.port.toString(),
           GMAIL_MCP_PORT: this.port.toString(),
           MCP_PORT: this.port.toString(),
-          // Also pass auth path
-          GMAIL_AUTH_PATH: this.config.authPath,
+          // Google Workspace MCP OAuth credentials from environment
+          GOOGLE_OAUTH_CLIENT_ID: process.env['GOOGLE_OAUTH_CLIENT_ID'],
+          GOOGLE_OAUTH_CLIENT_SECRET: process.env['GOOGLE_OAUTH_CLIENT_SECRET'],
         };
-        
-        logger.debug(`[GmailMCP] Spawning process with environment: PORT=${childEnv.PORT}, GMAIL_MCP_PORT=${childEnv.GMAIL_MCP_PORT}`);
-        
-        // Spawn the Gmail MCP process with configured port
-        this.process = spawn('npx', ['@gongrzhe/server-gmail-autoauth-mcp'], {
+
+        logger.debug(`[GmailMCP] Spawning process with environment: PORT=${childEnv.PORT}, OAuth configured: ${!!childEnv.GOOGLE_OAUTH_CLIENT_ID}`);
+
+        // Determine the path to Google Workspace MCP
+        const mcpPath = this.config.mcpPath || 'google_workspace_mcp';
+        const pythonCommand = 'python';
+        const mcpMainFile = `${mcpPath}/main.py`;
+
+        logger.info(`[GmailMCP] Starting Google Workspace MCP from: ${mcpMainFile}`);
+        logger.debug(`[GmailMCP] Python command: ${pythonCommand}`);
+        logger.debug(`[GmailMCP] Arguments: --tools gmail --port ${this.port}`);
+        logger.debug(`[GmailMCP] Working directory: ${process.cwd()}`);
+
+        // Log OAuth configuration status
+        if (childEnv.GOOGLE_OAUTH_CLIENT_ID) {
+          logger.debug('[GmailMCP] OAuth client ID configured');
+        } else {
+          logger.warn('[GmailMCP] WARNING: GOOGLE_OAUTH_CLIENT_ID not set - authentication will fail');
+        }
+
+        if (childEnv.GOOGLE_OAUTH_CLIENT_SECRET) {
+          logger.debug('[GmailMCP] OAuth client secret configured');
+        } else {
+          logger.warn('[GmailMCP] WARNING: GOOGLE_OAUTH_CLIENT_SECRET not set - authentication will fail');
+        }
+
+        // Spawn the Google Workspace MCP process with Gmail-only tools
+        // Python processes need proper signal handling
+        this.process = spawn(pythonCommand, [mcpMainFile, '--tools', 'gmail', '--port', this.port.toString()], {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: childEnv,
           cwd: process.cwd(),
+          // Ensure Python process gets proper signal forwarding
+          detached: false,
+          shell: false,
         });
 
         if (!this.process.pid) {
@@ -161,17 +189,26 @@ export class GmailMcpService extends EventEmitter {
           logger.error('[GmailMCP] Process error:', error);
           this.status.running = false;
           
-          // Enhanced error handling with port conflict detection
-          if (error.code === 'EADDRINUSE' || error.message?.includes('address already in use')) {
+          // Enhanced error handling for Python process and port conflicts
+          if (error.code === 'ENOENT') {
+            logger.error('[GmailMCP] Python or Google Workspace MCP not found');
+            logger.error('[GmailMCP] Possible solutions:');
+            logger.error('[GmailMCP]   1. Install Python 3.10+ and ensure it\'s in PATH');
+            logger.error('[GmailMCP]   2. Clone Google Workspace MCP: git clone https://github.com/taylorwilsdon/google_workspace_mcp.git');
+            logger.error('[GmailMCP]   3. Set GOOGLE_WORKSPACE_MCP_PATH environment variable to the cloned directory');
+            logger.error('[GmailMCP]   4. Install dependencies: pip install uv && cd google_workspace_mcp && uv sync');
+
+            this.status.lastError = 'Python or Google Workspace MCP not found';
+          } else if (error.code === 'EADDRINUSE' || error.message?.includes('address already in use')) {
             const portDetails = getPortConfigDetails();
             logger.error(`[GmailMCP] Port ${this.port} is already in use`);
-            logger.error('[GmailMCP] This usually means another Gmail MCP instance is already running');
+            logger.error('[GmailMCP] This usually means another MCP instance is already running');
             logger.error('[GmailMCP] Possible solutions:');
             logger.error(`[GmailMCP]   1. Kill the process using port ${this.port}: lsof -ti:${this.port} | xargs kill -9`);
             logger.error(`[GmailMCP]   2. Use --gmail-mcp-port <port> CLI argument or set GMAIL_MCP_PORT=<port> environment variable`);
             logger.error(`[GmailMCP]   3. Check if HTTP server is conflicting (current HTTP port: ${getResolvedPorts().httpServer})`);
             logger.error(`[GmailMCP] Current port source: ${portDetails.gmailMcp.source}`);
-            
+
             this.status.lastError = `Port ${this.port} is already in use (configured from ${portDetails.gmailMcp.source})`;
           } else if (error.code === 'EACCES' || error.message?.includes('permission denied')) {
             logger.error(`[GmailMCP] Permission denied to use port ${this.port}`);
@@ -334,15 +371,31 @@ export class GmailMcpService extends EventEmitter {
   ): void {
     // Add to buffer
     this.responseBuffer += data;
-    
+
+    // Log raw stdout for debugging Python process
+    if (logger.level === 'debug') {
+      const lines = data.split('\n').filter(line => line.trim());
+      for (const line of lines) {
+        if (line.length > 200) {
+          logger.debug(`[GmailMCP] stdout: ${line.substring(0, 200)}...`);
+        } else {
+          logger.debug(`[GmailMCP] stdout: ${line}`);
+        }
+      }
+    }
+
     // Check if process is ready (during startup)
-    if (startTimeout && (data.includes('MCP server running') || 
-        data.includes('Server started') || 
-        data.includes('ready'))) {
+    // Python MCP may have different ready indicators
+    if (startTimeout && (data.includes('MCP server running') ||
+        data.includes('Server started') ||
+        data.includes('ready') ||
+        data.includes('Listening on') ||
+        data.includes('Starting server'))) {
       clearTimeout(startTimeout);
+      logger.info('[GmailMCP] Google Workspace MCP process is ready');
       if (startResolve && startReject) {
         this.initializeMcp().then(() => {
-          logger.info('[GmailMCP] Process initialized successfully');
+          logger.info('[GmailMCP] MCP protocol initialized successfully');
           this.emitEvent('started');
           startResolve();
         }).catch((initError) => {
@@ -376,6 +429,17 @@ export class GmailMcpService extends EventEmitter {
         logger.warn('[GmailMCP] stderr:', line);
       } else if (line.includes('DEBUG')) {
         logger.debug('[GmailMCP] stderr:', line);
+      } else if (line.includes('Traceback') || line.includes('File "')) {
+        // Python stack trace
+        logger.error('[GmailMCP] Python error:', line);
+      } else if (line.includes('ModuleNotFoundError') || line.includes('ImportError')) {
+        // Python dependency errors
+        logger.error('[GmailMCP] Python dependency missing:', line);
+        logger.error('[GmailMCP] Run: cd google_workspace_mcp && pip install uv && uv sync');
+      } else if (line.includes('GOOGLE_OAUTH_CLIENT_ID') || line.includes('GOOGLE_OAUTH_CLIENT_SECRET')) {
+        // OAuth configuration errors
+        logger.error('[GmailMCP] OAuth configuration missing:', line);
+        logger.error('[GmailMCP] Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables');
       } else {
         logger.info('[GmailMCP] stderr:', line);
       }
@@ -470,15 +534,28 @@ export class GmailMcpService extends EventEmitter {
       
       try {
         const response = JSON.parse(line) as McpResponse;
-        logger.debug('[GmailMCP] Received response:', response);
-        
+
+        // Enhanced response logging
+        if (response.error) {
+          logger.error(`[GmailMCP] Received error response for ${response.id}:`, response.error);
+        } else {
+          // Log response with truncation for large responses
+          const responseStr = JSON.stringify(response.result);
+          if (responseStr.length > 500) {
+            logger.debug(`[GmailMCP] Received response for ${response.id}: ${responseStr.substring(0, 500)}...`);
+          } else {
+            logger.debug(`[GmailMCP] Received response for ${response.id}:`, response.result);
+          }
+        }
+
         // Find matching pending request
         const pendingRequest = this.pendingRequests.get(response.id);
         if (pendingRequest) {
           clearTimeout(pendingRequest.timeout);
           this.pendingRequests.delete(response.id);
-          
+
           if (response.error) {
+            logger.error(`[GmailMCP] Tool call failed for ${pendingRequest.method}: ${response.error.message}`);
             const error = new Error(response.error.message);
             (error as any).code = response.error.code;
             (error as any).data = response.error.data;
@@ -510,17 +587,18 @@ export class GmailMcpService extends EventEmitter {
       logger.error(`[GmailMCP] Maximum restart attempts (${this.config.restartAttempts}) reached. Giving up.`);
       this.status.lastError = `Process crashed after ${this.status.restartCount} restart attempts`;
       this.emitEvent('error', new Error(this.status.lastError));
-      
+
       // Emit a critical error that should stop the daemon
-      const criticalError = new Error(`Gmail MCP service failed permanently after ${this.config.restartAttempts} restart attempts`);
+      const criticalError = new Error(`Google Workspace MCP service failed permanently after ${this.config.restartAttempts} restart attempts`);
       (criticalError as any).code = 'GMAIL_MCP_PERMANENT_FAILURE';
       this.emitEvent('error', criticalError);
       return;
     }
 
     // Calculate exponential backoff delay
-    const baseDelay = 1000; // 1 second
-    const maxDelay = 30000; // 30 seconds
+    // Python processes may need more time between restarts
+    const baseDelay = 2000; // 2 seconds for Python startup
+    const maxDelay = 60000; // 60 seconds max
     const delay = Math.min(baseDelay * Math.pow(2, this.status.restartCount), maxDelay);
     
     this.status.restartCount++;
@@ -587,19 +665,20 @@ export class GmailMcpService extends EventEmitter {
       return;
     }
 
-    logger.info('[GmailMCP] Stopping Gmail MCP process...');
+    logger.info('[GmailMCP] Stopping Google Workspace MCP process...');
 
     return new Promise<void>((resolve) => {
       // Set a timeout for force kill if graceful shutdown fails
+      // Python processes may take longer to clean up
       const killTimeout = setTimeout(() => {
         if (this.process && !this.process.killed) {
-          logger.warn('[GmailMCP] Graceful shutdown timeout, force killing process');
+          logger.warn('[GmailMCP] Graceful shutdown timeout, force killing Python process');
           this.process.kill('SIGKILL');
         }
         this.status.running = false;
         this.status.pid = undefined;
         resolve();
-      }, 5000); // 5 second timeout for graceful shutdown
+      }, 8000); // 8 second timeout for Python process cleanup
 
       // Clear any pending requests first
       this.clearPendingRequests(new Error('Service shutting down'));
@@ -812,7 +891,15 @@ export class GmailMcpService extends EventEmitter {
     };
 
     // Log the request
-    logger.debug(`[GmailMCP] Sending request: ${method} (${requestId})`, params);
+    logger.debug(`[GmailMCP] Sending request: ${method} (${requestId})`);
+    if (method === 'tools/call' && params) {
+      const toolName = (params as any).name;
+      const toolArgs = (params as any).arguments;
+      logger.info(`[GmailMCP] Calling tool: ${toolName}`);
+      logger.debug(`[GmailMCP] Tool arguments:`, toolArgs);
+    } else {
+      logger.debug(`[GmailMCP] Request params:`, params);
+    }
     this.status.requestCount++;
 
     return new Promise((resolve, reject) => {
@@ -880,16 +967,62 @@ export class GmailMcpService extends EventEmitter {
   }
 
   /**
+   * Adapts request parameters for Google Workspace MCP
+   * @param tool - Original tool name
+   * @param args - Original arguments
+   * @returns Adapted tool name and arguments
+   */
+  private adaptRequestForGoogleWorkspace(tool: string, args: Record<string, unknown>): {
+    tool: string;
+    args: Record<string, unknown>
+  } {
+    const mappedTool = this.TOOL_MAP[tool] || tool;
+    const adaptedArgs = { ...args };
+
+    // Add required user_google_email for Gmail operations
+    if (mappedTool.includes('gmail')) {
+      adaptedArgs.user_google_email = process.env['GMAIL_USER_EMAIL'] ||
+                                      process.env['GOOGLE_USER_EMAIL'] ||
+                                      'me';
+    }
+
+    // Parameter name mappings
+    if (tool === 'search_emails') {
+      if ('maxResults' in adaptedArgs) {
+        adaptedArgs.page_size = adaptedArgs.maxResults;
+        delete adaptedArgs.maxResults;
+      }
+      // Google Workspace MCP uses 'query_string' instead of 'query'
+      if ('query' in adaptedArgs) {
+        adaptedArgs.query_string = adaptedArgs.query;
+        delete adaptedArgs.query;
+      }
+    }
+
+    if (tool === 'read_email') {
+      if ('messageId' in adaptedArgs) {
+        adaptedArgs.message_id = adaptedArgs.messageId;
+        delete adaptedArgs.messageId;
+      }
+      // Always include body content
+      adaptedArgs.include_body = true;
+    }
+
+    return { tool: mappedTool, args: adaptedArgs };
+  }
+
+  /**
    * Searches for Gmail messages
    * @param params - Search parameters
    * @returns Promise that resolves with search results
    */
   async searchEmails(params: GmailSearchParams): Promise<GmailMessage[]> {
+    const { tool, args } = this.adaptRequestForGoogleWorkspace('search_emails', params);
     const result = await this.sendRequest('tools/call', {
-      name: 'search_emails',
-      arguments: params,
+      name: tool,
+      arguments: args,
     });
-    
+
     // Parse and return results
     return this.parseSearchResults(result);
   }
@@ -900,11 +1033,12 @@ export class GmailMcpService extends EventEmitter {
    * @returns Promise that resolves with the email content
    */
   async readEmail(params: GmailReadParams): Promise<GmailMessage> {
+    const { tool, args } = this.adaptRequestForGoogleWorkspace('read_email', params);
     const result = await this.sendRequest('tools/call', {
-      name: 'read_email',
-      arguments: params,
+      name: tool,
+      arguments: args,
     });
-    
+
     // Parse and return email, preserving the message ID from params
     const email = this.parseEmailResult(result);
     if (email.id.startsWith('email_') && params.messageId) {

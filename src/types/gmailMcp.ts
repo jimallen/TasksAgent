@@ -91,7 +91,7 @@ export interface GmailMcpConfig {
   restartAttempts: number;
   startupTimeout: number;
   requestTimeout: number;
-  authPath?: string;
+  mcpPath?: string; // Path to Google Workspace MCP installation
 }
 
 /**
