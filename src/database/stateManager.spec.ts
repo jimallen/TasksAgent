@@ -40,7 +40,7 @@ describe('StateManager', () => {
       subject: 'Test Meeting Notes',
       from: 'sender@example.com',
       to: ['recipient@example.com'],
-      date: new Date('2024-01-10').toISOString(),
+      date: new Date('2024-01-10'),
       body: 'Meeting transcript content',
       attachments: []
     };
@@ -133,25 +133,25 @@ describe('StateManager', () => {
 
     it('should detect duplicate tasks by hash', async () => {
       // Save first task
-      const savedIds = await stateManager.saveTasks('email123', [mockTasks[0]]);
+      const savedIds = await stateManager.saveTasks('email123', [mockTasks[0]!]);
       expect(savedIds).toHaveLength(1);
 
       // Try to save similar task (should be detected as duplicate)
-      const duplicateIds = await stateManager.saveTasks('email124', [mockTasks[1]]);
+      const duplicateIds = await stateManager.saveTasks('email124', [mockTasks[1]!]);
       expect(duplicateIds).toHaveLength(0); // Should not save duplicate
     });
 
     it('should save unique tasks', async () => {
-      const savedIds = await stateManager.saveTasks('email123', [mockTasks[0], mockTasks[2]]);
+      const savedIds = await stateManager.saveTasks('email123', [mockTasks[0]!, mockTasks[2]!]);
       expect(savedIds).toHaveLength(2);
     });
 
     it('should find similar tasks', async () => {
       // Save some tasks first
-      await stateManager.saveTasks('email123', [mockTasks[0], mockTasks[2]]);
+      await stateManager.saveTasks('email123', [mockTasks[0]!, mockTasks[2]!]);
 
       // Find similar tasks
-      const similar = await stateManager.findSimilarTasks(mockTasks[1], 0.5);
+      const similar = await stateManager.findSimilarTasks(mockTasks[1]!, 0.5);
       expect(similar.length).toBeGreaterThan(0);
       expect(similar[0].description).toContain('quarterly report');
     });

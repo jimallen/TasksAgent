@@ -54,12 +54,12 @@
   - [x] 4.4 Maintain existing rate limiting (250 units/sec) with new MCP
   - [x] 4.5 Ensure attachment handling works with new MCP (documented limitation)
 
-- [ ] 5.0 Update HTTP API and Daemon Integration
+- [x] 5.0 Update HTTP API and Daemon Integration
   - [x] 5.1 Remove `/gmail/*` proxy endpoints (no longer needed)
-  - [ ] 5.2 Update health check to validate new MCP status
-  - [ ] 5.3 Ensure daemon startup sequence properly initializes new MCP
-  - [ ] 5.4 Update shutdown handlers for clean MCP termination
-  - [ ] 5.5 Test manual trigger endpoint with new MCP integration
+  - [x] 5.2 Update health check to validate new MCP status
+  - [x] 5.3 Ensure daemon startup sequence properly initializes new MCP
+  - [x] 5.4 Update shutdown handlers for clean MCP termination
+  - [x] 5.5 Test manual trigger endpoint with new MCP integration
 
 - [ ] 6.0 Testing and Validation
   - [ ] 6.1 Update unit tests in `gmailMcpService.spec.ts` for new MCP

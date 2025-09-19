@@ -165,24 +165,39 @@ async function startDaemon() {
     }
   });
   
-  // Start Gmail MCP service
+  // Check for required Google Workspace MCP configuration
+  if (!process.env['GOOGLE_OAUTH_CLIENT_ID'] || !process.env['GOOGLE_OAUTH_CLIENT_SECRET']) {
+    logger.warn('[Gmail MCP] OAuth credentials not configured');
+    logger.warn('[Gmail MCP] Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables');
+    logger.warn('[Gmail MCP] See docs/GMAIL_SETUP.md for OAuth setup instructions');
+  }
+
+  if (!process.env['GOOGLE_WORKSPACE_MCP_PATH']) {
+    logger.debug('[Gmail MCP] GOOGLE_WORKSPACE_MCP_PATH not set, will try default location');
+  }
+
+  // Start Gmail MCP service (Google Workspace MCP)
   try {
-    logger.info(`[Gmail MCP] Starting service on port ${ports.gmailMcp}...`);
+    logger.info(`[Gmail MCP] Starting Google Workspace MCP service on port ${ports.gmailMcp}...`);
     await gmailMcpService.start();
-    logger.info(`[Gmail MCP] Service started successfully on port ${ports.gmailMcp}`);
+    logger.info(`[Gmail MCP] Google Workspace MCP service started successfully on port ${ports.gmailMcp}`);
   } catch (error: any) {
-    logger.error('Failed to start Gmail MCP service:', error);
-    
+    logger.error('Failed to start Google Workspace MCP service:', error);
+
     // Provide recovery suggestions based on error type
     if (error.code === 'GMAIL_AUTH_FAILED') {
-      logger.error('[Gmail MCP] Authentication failed. To fix:');
-      logger.error('[Gmail MCP]   1. Run: npx @gongrzhe/server-gmail-autoauth-mcp');
-      logger.error('[Gmail MCP]   2. Follow the OAuth flow in your browser');
-      logger.error('[Gmail MCP]   3. Restart the daemon after authentication');
-    } else if (error.code === 'GMAIL_MCP_NOT_FOUND') {
-      logger.error('[Gmail MCP] Package not installed. To fix:');
-      logger.error('[Gmail MCP]   1. Run: npm install @gongrzhe/server-gmail-autoauth-mcp');
-      logger.error('[Gmail MCP]   2. Restart the daemon');
+      logger.error('[Gmail MCP] OAuth authentication failed. To fix:');
+      logger.error('[Gmail MCP]   1. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in .env');
+      logger.error('[Gmail MCP]   2. Ensure OAuth credentials have Gmail API scope');
+      logger.error('[Gmail MCP]   3. Follow the OAuth consent flow when prompted');
+      logger.error('[Gmail MCP]   4. Restart the daemon after configuration');
+    } else if (error.code === 'GMAIL_MCP_NOT_FOUND' || error.message?.includes('Python') || error.message?.includes('not found')) {
+      logger.error('[Gmail MCP] Google Workspace MCP not found. To fix:');
+      logger.error('[Gmail MCP]   1. Install Python 3.10+ and ensure it\'s in PATH');
+      logger.error('[Gmail MCP]   2. Clone: git clone https://github.com/taylorwilsdon/google_workspace_mcp.git');
+      logger.error('[Gmail MCP]   3. Set GOOGLE_WORKSPACE_MCP_PATH environment variable to the cloned directory');
+      logger.error('[Gmail MCP]   4. Install deps: cd google_workspace_mcp && pip install uv && uv sync');
+      logger.error('[Gmail MCP]   5. Restart the daemon');
     } else if (error.message?.includes('port') || error.message?.includes('EADDRINUSE')) {
       logger.error('[Gmail MCP] Port conflict detected. To fix:');
       logger.error(`[Gmail MCP]   1. Use CLI: npm run daemon -- --gmail-mcp-port <port>`);
@@ -192,12 +207,13 @@ async function startDaemon() {
     } else {
       logger.error('[Gmail MCP] Generic startup failure. Try:');
       logger.error('[Gmail MCP]   1. Check logs for detailed error messages');
-      logger.error('[Gmail MCP]   2. Verify Gmail MCP is installed: npm list @gongrzhe/server-gmail-autoauth-mcp');
-      logger.error('[Gmail MCP]   3. Try a different port: npm run daemon -- --gmail-mcp-port 3001');
-      logger.error('[Gmail MCP]   4. Check system resources and permissions');
+      logger.error('[Gmail MCP]   2. Verify Python is installed: python --version');
+      logger.error('[Gmail MCP]   3. Verify Google Workspace MCP path: ls $GOOGLE_WORKSPACE_MCP_PATH');
+      logger.error('[Gmail MCP]   4. Try a different port: npm run daemon -- --gmail-mcp-port 3001');
+      logger.error('[Gmail MCP]   5. Check system resources and permissions');
     }
-    
-    logger.warn('Continuing without Gmail MCP - Gmail features will not be available');
+
+    logger.warn('Continuing without Google Workspace MCP - Gmail features will not be available');
     // Don't throw - allow daemon to continue without Gmail
     gmailMcpService = null;
   }
@@ -253,39 +269,61 @@ async function startDaemon() {
     
     await service.start();
     
-    process.on('SIGINT', async () => {
-      logger.info('Received SIGINT, shutting down gracefully...');
-      if (gmailMcpService) {
+    // Unified shutdown handler
+    const gracefulShutdown = async (signal: string) => {
+      logger.info(`Received ${signal}, shutting down gracefully...`);
+
+      // Stop accepting new requests
+      if (httpServer) {
+        logger.info('[Shutdown] Stopping HTTP server...');
         try {
-          await gmailMcpService.stop();
+          await httpServer.stop();
+          logger.info('[Shutdown] HTTP server stopped');
         } catch (error) {
-          logger.error('Error stopping Gmail MCP service:', error);
+          logger.error('[Shutdown] Error stopping HTTP server:', error);
         }
       }
-      if (httpServer) {
-        await httpServer.stop();
+
+      // Stop the daemon service
+      logger.info('[Shutdown] Stopping daemon service...');
+      try {
+        await service.stop();
+        logger.info('[Shutdown] Daemon service stopped');
+      } catch (error) {
+        logger.error('[Shutdown] Error stopping daemon service:', error);
       }
-      await service.stop();
-      await service.cleanup();
-      process.exit(0);
-    });
-    
-    process.on('SIGTERM', async () => {
-      logger.info('Received SIGTERM, shutting down gracefully...');
+
+      // Stop Gmail MCP service (Python process)
       if (gmailMcpService) {
+        logger.info('[Shutdown] Stopping Google Workspace MCP service...');
         try {
           await gmailMcpService.stop();
+          logger.info('[Shutdown] Google Workspace MCP service stopped');
         } catch (error) {
-          logger.error('Error stopping Gmail MCP service:', error);
+          logger.error('[Shutdown] Error stopping Google Workspace MCP service:', error);
+          // Force cleanup if graceful stop failed
+          try {
+            await gmailMcpService.cleanup();
+          } catch (cleanupError) {
+            logger.error('[Shutdown] Error during MCP cleanup:', cleanupError);
+          }
         }
       }
-      if (httpServer) {
-        await httpServer.stop();
+
+      // Final cleanup
+      try {
+        await service.cleanup();
+        logger.info('[Shutdown] Cleanup completed');
+      } catch (error) {
+        logger.error('[Shutdown] Error during final cleanup:', error);
       }
-      await service.stop();
-      await service.cleanup();
+
+      logger.info('[Shutdown] Graceful shutdown completed');
       process.exit(0);
-    });
+    };
+
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     
     logger.info('Daemon is running in background. Press Ctrl+C to stop.');
   } else {
@@ -311,21 +349,44 @@ async function startDaemon() {
     
     process.on('uncaughtException', async (err) => {
       logger.error('Uncaught exception:', err);
-      if (gmailMcpService) {
-        try {
-          await gmailMcpService.stop();
-        } catch (stopError) {
-          logger.error('Error stopping Gmail MCP service during uncaught exception:', stopError);
-        }
-      }
+
+      // Emergency shutdown sequence
+      logger.info('[Emergency] Starting emergency shutdown...');
+
+      // Try to stop HTTP server first
       if (httpServer) {
         try {
+          logger.info('[Emergency] Stopping HTTP server...');
           await httpServer.stop();
         } catch (stopError) {
-          logger.error('Error stopping HTTP server during uncaught exception:', stopError);
+          logger.error('[Emergency] Error stopping HTTP server:', stopError);
         }
       }
-      await service.cleanup();
+
+      // Stop Google Workspace MCP service (Python process)
+      if (gmailMcpService) {
+        try {
+          logger.info('[Emergency] Stopping Google Workspace MCP service...');
+          await gmailMcpService.stop();
+        } catch (stopError) {
+          logger.error('[Emergency] Error stopping Google Workspace MCP service:', stopError);
+          // Force cleanup on Python process
+          try {
+            await gmailMcpService.cleanup();
+          } catch (cleanupError) {
+            logger.error('[Emergency] Error during MCP cleanup:', cleanupError);
+          }
+        }
+      }
+
+      // Final cleanup
+      try {
+        await service.cleanup();
+      } catch (cleanupError) {
+        logger.error('[Emergency] Error during service cleanup:', cleanupError);
+      }
+
+      logger.info('[Emergency] Emergency shutdown completed');
       process.exit(1);
     });
     

@@ -67,11 +67,37 @@ export class DaemonHttpServer {
     // Health check
     this.app.get('/health', (_req, res) => {
       const stats = this.daemonService.getStats();
-      const httpUptime = this.startupTime ? 
+      const httpUptime = this.startupTime ?
         Math.floor((Date.now() - this.startupTime.getTime()) / 1000) : 0;
-      
+
+      // Get detailed MCP status if available
+      let gmailMcpStatus: any = { configured: false };
+      if (this.gmailMcpService) {
+        const mcpStatus = this.gmailMcpService.getStatus();
+        gmailMcpStatus = {
+          running: mcpStatus.running,
+          pid: mcpStatus.pid,
+          port: this.gmailMcpService.getPort(),
+          uptime: mcpStatus.uptime,
+          requestCount: mcpStatus.requestCount,
+          errorCount: mcpStatus.errorCount,
+          restartCount: mcpStatus.restartCount,
+          lastError: mcpStatus.lastError,
+          startTime: mcpStatus.startTime,
+          // OAuth status check
+          oauthConfigured: !!(process.env['GOOGLE_OAUTH_CLIENT_ID'] && process.env['GOOGLE_OAUTH_CLIENT_SECRET']),
+          // Python availability (inferred from running status)
+          pythonAvailable: mcpStatus.running || mcpStatus.errorCount === 0
+        };
+      }
+
+      // Determine overall health status
+      const overallStatus = stats.status === 'running' &&
+                           (!this.gmailMcpService || gmailMcpStatus.running) ?
+                           'healthy' : 'degraded';
+
       res.json({
-        status: 'ok',
+        status: overallStatus,
         daemon: stats.status,
         uptime: process.uptime(),
         httpServer: {
@@ -80,16 +106,16 @@ export class DaemonHttpServer {
           startupTime: this.startupTime,
           uptime: httpUptime
         },
-        gmailMcp: this.gmailMcpService ? {
-          running: stats.gmailMcpRunning || false,
-          pid: stats.gmailMcpPid,
-          port: this.gmailMcpService.getPort(),
-          requestCount: stats.gmailMcpRequestCount || 0
-        } : { configured: false },
+        gmailMcp: gmailMcpStatus,
         stats: {
           totalRuns: stats.totalRuns,
           emailsProcessed: stats.emailsProcessed,
           tasksExtracted: stats.tasksExtracted
+        },
+        environment: {
+          nodeVersion: process.version,
+          platform: process.platform,
+          googleWorkspaceMcpPath: process.env['GOOGLE_WORKSPACE_MCP_PATH'] || 'Not configured'
         }
       });
     });
