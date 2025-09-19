@@ -10,10 +10,10 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 ## 📚 Documentation
 
 - [System Architecture](docs/system-architecture.md) - Detailed system design with mermaid diagrams
-- [Unified Daemon Architecture](docs/ARCHITECTURE_UNIFIED_DAEMON.md) - **NEW**: Single service architecture with integrated Gmail MCP
+- [Unified Daemon Architecture](docs/ARCHITECTURE_UNIFIED_DAEMON.md) - **NEW**: Single service architecture with Google Workspace MCP integration
 - [Daemon Service Guide](docs/daemon-service.md) - Background service with TUI monitoring
 - [API Reference](docs/api-reference.md) - Complete API documentation
-- [Gmail Setup Guide](docs/GMAIL_SETUP.md) - Detailed Gmail MCP configuration
+- [Gmail Setup Guide](docs/GMAIL_SETUP.md) - Detailed Gmail/OAuth configuration
 - [Obsidian Plugin](obsidian-plugin/README.md) - Visual task dashboard plugin
 - [AI Context](CLAUDE.md) - Information for AI assistants
 - [Configuration Guide](#configuration) - Environment setup
@@ -41,14 +41,14 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 - ⚡ **Quick Process**: 24-hour lookback command for recent emails only
 
 ### NEW: Unified Daemon Service
-- 🖥️ **Single Service Architecture**: One command starts everything including Gmail MCP
+- 🖥️ **Single Service Architecture**: One command starts everything including Google Workspace MCP
 - 📊 **Live Statistics**: Track emails processed, tasks extracted, and success rates  
 - ⚙️ **Manual Control**: HTTP API for triggering processing and monitoring
 - 📈 **Performance Metrics**: Monitor uptime, error rates, and processing history
 - 🔧 **TUI Dashboard**: Optional terminal interface for real-time monitoring
 - 📜 **Activity Log**: Real-time log viewer with color-coded messages
 - 💾 **Persistent Stats**: SQLite database for historical metrics
-- 🔄 **Auto-Recovery**: Gmail MCP crashes are automatically handled with restart logic
+- 🔄 **Auto-Recovery**: MCP service crashes are automatically handled with restart logic
 
 ## 📋 Prerequisites
 
@@ -100,7 +100,7 @@ TZ=America/New_York
 
 ### 3. Setup Gmail Authentication
 
-The unified daemon includes integrated Gmail MCP for seamless Gmail access. You'll need to set up Google Cloud OAuth credentials first.
+The unified daemon uses Google Workspace MCP for Gmail access (with future extensibility for Calendar and Drive). You'll need to set up Google Cloud OAuth credentials first.
 
 #### Step 1: Create Google Cloud OAuth Credentials
 
@@ -144,30 +144,37 @@ The unified daemon includes integrated Gmail MCP for seamless Gmail access. You'
 #### Step 2: Install OAuth Credentials
 
 ```bash
-# Create Gmail MCP directory
+# Create directory for OAuth credentials (multiple locations supported)
 mkdir -p ~/.gmail-mcp
 
-# Copy and rename the downloaded credentials file
+# Option 1: Use Gmail MCP location (recommended)
 cp ~/Downloads/client_secret_*.json ~/.gmail-mcp/gcp-oauth.keys.json
 
-# Alternative: Place in current directory
+# Option 2: Use Google Workspace MCP location
+mkdir -p ~/.celebrate-oracle
+cp ~/Downloads/client_secret_*.json ~/.celebrate-oracle/client_secret.json
+
+# Option 3: Place in current directory
 cp ~/Downloads/client_secret_*.json ./gcp-oauth.keys.json
 ```
 
 #### Step 3: Authenticate with Gmail
 
-Now run the Gmail MCP server to complete authentication:
+The daemon now uses Google Workspace MCP internally. Initial authentication can be done via:
 
 ```bash
-# This will now work with your OAuth credentials
+# Option 1: Run the daemon which includes Gmail MCP
+npm run daemon
+
+# Option 2: Use the legacy Gmail MCP for initial auth only
 npx @gongrzhe/server-gmail-autoauth-mcp
 ```
 
 This will:
-1. Open a browser window for Google sign-in
+1. Open a browser window for Google sign-in (if not already authenticated)
 2. Ask you to authorize the app
-3. Save the refresh token in `~/.gmail-mcp/`
-4. Start the MCP server on port 3000
+3. Save the refresh token in `~/.gmail-mcp/` or `~/.celebrate-oracle/`
+4. Start the service with integrated Gmail access
 
 #### Step 4: Verify Connection
 
@@ -203,7 +210,7 @@ npx @gongrzhe/server-gmail-autoauth-mcp
 
 **Authentication Loop:**
 ```bash
-# Clear all Gmail MCP data
+# Clear all Gmail OAuth data
 rm -rf ~/.gmail-mcp
 mkdir -p ~/.gmail-mcp
 # Re-copy your OAuth credentials and start over
@@ -226,7 +233,7 @@ kill -9 <PID>
 # Run initial setup and verify connections
 npm run start:test
 
-# Start unified daemon (recommended) - includes Gmail MCP
+# Start unified daemon (recommended) - includes Google Workspace MCP
 npm run daemon           # With TUI dashboard
 # OR
 npm run daemon:headless  # For servers/background
@@ -239,7 +246,7 @@ npm run start:once
 
 ### Running Modes
 
-The unified daemon provides a single-service architecture with integrated Gmail MCP:
+The unified daemon provides a single-service architecture with integrated Google Workspace MCP:
 
 ```bash
 # 🎯 RECOMMENDED: Unified daemon with TUI
@@ -247,7 +254,7 @@ npm run daemon
 # - Single command starts everything
 # - Real-time dashboard with statistics  
 # - Manual processing controls
-# - Gmail MCP automatically managed
+# - Google Workspace MCP automatically managed
 
 # 🖥️ HEADLESS: For servers and background use
 npm run daemon:headless
@@ -257,7 +264,7 @@ npm run daemon:headless
 
 # ⚙️ CUSTOM PORTS: Configure network ports
 npm run daemon -- --http-port 8080                    # Custom HTTP port
-npm run daemon -- --gmail-mcp-port 9000               # Custom Gmail MCP port
+npm run daemon -- --gmail-mcp-port 9000               # Custom Google Workspace MCP port
 npm run daemon -- --http-port 8080 --gmail-mcp-port 9000  # Both custom
 
 # 🔍 CONFIGURATION: View active settings
@@ -289,14 +296,14 @@ HTTP_SERVER_PORT=8080 GMAIL_MCP_PORT=9000 npm run daemon
 
 # Default Ports (lowest priority)
 # HTTP Server: 3002
-# Gmail MCP: 3000
+# Google Workspace MCP: 3000
 
 # Configuration Priority: CLI > Environment > Defaults
 ```
 
 **Port Requirements:**
 - Ports must be between 1024-65535
-- HTTP Server and Gmail MCP must use different ports
+- HTTP Server and Google Workspace MCP must use different ports
 - Use `--config-dump` to view active configuration
 
 ### HTTP API Endpoints
@@ -307,7 +314,7 @@ The unified daemon exposes all functionality via HTTP API on configured port (de
 # Health and Status
 curl http://localhost:3002/health        # Overall health
 curl http://localhost:3002/status        # Detailed statistics
-curl http://localhost:3002/gmail/health  # Gmail MCP status
+# Note: Gmail proxy endpoints have been removed - use /trigger instead
 
 # Manual Processing
 curl -X POST http://localhost:3002/trigger \
@@ -537,7 +544,7 @@ npm run test:samples
 #### Gmail Authentication Failed
 
 ```bash
-# Re-authenticate Gmail MCP
+# Re-authenticate Gmail OAuth
 npx @gongrzhe/server-gmail-autoauth-mcp --reset
 ```
 
@@ -567,6 +574,14 @@ sudo dnf install libnotify
 # Arch
 sudo pacman -S libnotify
 ```
+
+#### Attachment Downloads Not Working
+
+**Known Limitation**: The Google Workspace MCP doesn't currently support attachment downloads.
+- **Impact**: PDF/document transcripts cannot be processed
+- **Workaround**: System processes inline email content instead
+- **Future**: Direct Gmail API integration planned for Phase 2
+- See [docs/attachment-handling-limitation.md](docs/attachment-handling-limitation.md) for details
 
 #### Rate Limiting Errors
 
@@ -599,7 +614,7 @@ tail -f logs/app.log
 ### Core Services
 
 #### GmailService
-- `connect()`: Establish Gmail MCP connection
+- `connect()`: Establish Google Workspace MCP connection
 - `fetchRecentEmails(hours)`: Get emails from past N hours
 - `downloadAttachment(messageId, attachmentId)`: Download file attachments
 
@@ -657,7 +672,8 @@ MIT License - see LICENSE file for details
 
 ## 🙏 Acknowledgments
 
-- [Gmail MCP Server](https://github.com/GongRzhe/Gmail-MCP-Server) by @gongrzhe
+- [Google Workspace MCP](https://github.com/taylorwilsdon/google_workspace_mcp) - Future-ready Google integration
+- [Gmail MCP Server](https://github.com/GongRzhe/Gmail-MCP-Server) by @gongrzhe (legacy)
 - [Claude AI](https://claude.ai) by Anthropic
 - [Obsidian](https://obsidian.md) community
 - [MCP Protocol](https://modelcontextprotocol.io) by Anthropic
@@ -674,7 +690,7 @@ MIT License - see LICENSE file for details
 - [System Architecture](docs/system-architecture.md)
 - [API Documentation](docs/api-reference.md)
 - [Claude Context](CLAUDE.md)
-- [Gmail MCP Setup Guide](#3-setup-gmail-mcp-server)
+- [Gmail Setup Guide](#3-setup-gmail-authentication)
 - [Obsidian Integration](#obsidian-vault-structure)
 
 ---
