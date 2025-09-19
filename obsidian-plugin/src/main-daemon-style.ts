@@ -892,19 +892,23 @@ created: ${new Date().toISOString()}
         }
       }
       
-      // Fetch the specific email by ID
+      // Read the specific email by ID to get full content
+      console.log(`Reading email with ID: ${emailId}`);
       const email = await this.gmailService.readEmail(emailId);
       
-      if (!email) {
+      if (!email || !email.success) {
         new Notice('Could not find the original email. It may have been deleted.');
         this.updateStatus('Ready');
         return;
       }
       
+      const emailData = email.email || email;
+      console.log('Found email:', emailData.subject);
+      
       new Notice('Extracting tasks and summary...');
       
-      // Get email content
-      const emailContent = email.body || email.snippet || '';
+      // Get email content from readEmail (which returns the full body)
+      const emailContent = emailData.body || emailData.snippet || '';
       
       // Extract tasks using Claude (or fallback)
       let extraction: TaskExtractionResult;
@@ -914,12 +918,13 @@ created: ${new Date().toISOString()}
         extraction = await this.claudeExtractor.extractTasks(emailContent, email.subject);
         console.log(`Extracted ${extraction.tasks.length} tasks with ${extraction.confidence}% confidence`);
       } else {
-        console.log('Using fallback extraction for reprocessing');
-        extraction = this.fallbackTaskExtraction(emailContent, email.subject);
+        console.log('Claude extractor not available for reprocessing');
+        new Notice('❌ Claude AI not configured - cannot reprocess');
+        return;
       }
       
       // Format the new content
-      const newContent = this.formatMeetingNote(email, extraction);
+      const newContent = this.formatMeetingNote(emailData, extraction);
       
       // Replace the file content
       await this.app.vault.modify(activeFile, newContent);
