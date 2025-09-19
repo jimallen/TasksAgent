@@ -361,5 +361,5 @@ git push origin v1.2.0
 For build issues:
 1. Check this guide first
 2. Review error messages in console
-3. Check [GitHub Issues](https://github.com/yourusername/TasksAgent/issues)
+3. Check [GitHub Issues](https://github.com/jimallen/TasksAgent/issues)
 4. Ask in Obsidian Discord #plugin-dev channel

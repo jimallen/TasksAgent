@@ -115,7 +115,7 @@ class GmailMcpHttpService {
     }
   }
   
-  async getEmailContent(emailId: string): Promise<string> {
+  async readEmail(emailId: string): Promise<any> {
     if (!this.connected) {
       throw new Error('Not connected to Gmail MCP service');
     }
@@ -139,15 +139,22 @@ class GmailMcpHttpService {
       }
       
       if (data.success && data.email) {
-        // Return the email body if available, otherwise return the whole email object as string
-        return data.email.body || JSON.stringify(data.email);
+        return data.email;
       }
       
-      return '';
+      return null;
     } catch (error) {
-      console.error('Failed to get email content:', error);
-      return '';
+      console.error('Failed to read email:', error);
+      return null;
     }
+  }
+  
+  async getEmailContent(emailId: string): Promise<string> {
+    const email = await this.readEmail(emailId);
+    if (email) {
+      return email.body || JSON.stringify(email);
+    }
+    return '';
   }
   
   /**
@@ -311,10 +318,16 @@ export default class MeetingTasksPlugin extends Plugin {
     // Add commands
     this.addCommand({
       id: 'process-meeting-emails',
-      name: 'Process meeting emails and extract tasks',
+      name: '📧 Process meeting emails now',
       callback: async () => {
         await this.processEmails();
-      }
+      },
+      hotkeys: [
+        {
+          modifiers: ['Mod', 'Shift'],
+          key: 'M'
+        }
+      ]
     });
     
     this.addCommand({
@@ -326,10 +339,30 @@ export default class MeetingTasksPlugin extends Plugin {
     });
     
     this.addCommand({
+      id: 'quick-process-emails',
+      name: '⚡ Quick process (last 24 hours)',
+      callback: async () => {
+        // Temporarily set lookback to 24 hours
+        const originalLookback = this.settings.lookbackHours;
+        this.settings.lookbackHours = 24;
+        await this.processEmails();
+        this.settings.lookbackHours = originalLookback;
+      }
+    });
+    
+    this.addCommand({
       id: 'reset-processed-emails',
       name: 'Reset processed emails',
       callback: async () => {
         await this.resetProcessedEmails();
+      }
+    });
+    
+    this.addCommand({
+      id: 'reprocess-meeting-note',
+      name: '🔄 Reprocess current meeting note',
+      callback: async () => {
+        await this.reprocessCurrentMeetingNote();
       }
     });
     
@@ -342,11 +375,6 @@ export default class MeetingTasksPlugin extends Plugin {
     // Add dashboard ribbon icon
     this.addRibbonIcon('layout-dashboard', 'Open task dashboard', () => {
       this.openTaskDashboard();
-    });
-    
-    // Add reset ribbon icon
-    this.addRibbonIcon('refresh-cw', 'Reset processed emails', async () => {
-      await this.resetProcessedEmails();
     });
     
     // Initialize services
@@ -392,8 +420,8 @@ export default class MeetingTasksPlugin extends Plugin {
     });
     
     try {
-      this.updateStatus('Processing...');
-      new Notice('Triggering email processing...');
+      this.updateStatus('Processing emails...');
+      new Notice(`🔄 Searching for meeting emails from the last ${this.settings.lookbackHours} hours...`);
       
       // Try to trigger the daemon via HTTP with quiet mode
       const daemonUrl = 'http://localhost:3002/trigger';
@@ -408,14 +436,28 @@ export default class MeetingTasksPlugin extends Plugin {
             source: 'obsidian-plugin',
             quiet: true,  // Use quiet mode to suppress notifications
             lookbackHours: this.settings.lookbackHours,  // Pass the plugin's lookback setting
-            meetingPlatforms: this.settings.meetingPlatforms  // Pass platform preferences
+            meetingPlatforms: this.settings.meetingPlatforms,  // Pass platform preferences
+            anthropicApiKey: this.settings.anthropicApiKey  // Pass the API key from plugin settings
           })
         });
         
         if (response.status === 200) {
           const result = response.json;
-          new Notice(`✅ Processed: ${result.emailsProcessed || 0} emails, ${result.tasksExtracted || 0} tasks extracted`);
-          this.updateStatus('Processing complete');
+          const emailCount = result.emailsProcessed || 0;
+          const taskCount = result.tasksExtracted || 0;
+          const noteCount = result.notesCreated || 0;
+          
+          if (emailCount === 0) {
+            new Notice(`📭 No new meeting emails found`);
+            this.updateStatus('No new emails');
+          } else if (taskCount === 0) {
+            new Notice(`📧 Processed ${emailCount} email${emailCount !== 1 ? 's' : ''} - No tasks found`);
+            this.updateStatus('No tasks found');
+          } else {
+            new Notice(`✅ Success! Found ${taskCount} task${taskCount !== 1 ? 's' : ''} from ${emailCount} email${emailCount !== 1 ? 's' : ''}`);
+            this.updateStatus(`${taskCount} tasks extracted`);
+          }
+          
           return;
         }
       } catch (daemonError) {
@@ -796,6 +838,109 @@ created: ${new Date().toISOString()}
       ...this.settings,
       processedEmails: Array.from(this.processedEmails)
     });
+  }
+  
+  async reprocessCurrentMeetingNote() {
+    try {
+      // Get the active file
+      const activeFile = this.app.workspace.getActiveFile();
+      
+      if (!activeFile) {
+        new Notice('No active file. Please open a meeting note to reprocess.');
+        return;
+      }
+      
+      // Check if this is a meeting note (in the meetings folder or has meeting frontmatter)
+      const content = await this.app.vault.read(activeFile);
+      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      
+      if (!frontmatterMatch) {
+        new Notice('This file does not appear to be a meeting note (no frontmatter).');
+        return;
+      }
+      
+      // Parse frontmatter to get email ID
+      const frontmatter = frontmatterMatch[1];
+      const emailIdMatch = frontmatter.match(/emailId:\s*(.+)/);
+      
+      if (!emailIdMatch || !emailIdMatch[1]) {
+        new Notice('No email ID found in this meeting note. Cannot reprocess.');
+        return;
+      }
+      
+      const emailId = emailIdMatch[1].trim();
+      
+      // Confirm with user
+      const confirmed = confirm(`Reprocess Meeting Note?\n\nThis will fetch the original email and regenerate the summary and tasks.\n\nEmail ID: ${emailId}`);
+      
+      if (!confirmed) {
+        return;
+      }
+      
+      this.updateStatus('Reprocessing...');
+      new Notice('Fetching original email...');
+      
+      // Ensure Gmail is connected
+      if (!this.gmailService || !this.gmailService.isConnected()) {
+        new Notice('Gmail not connected. Reconnecting...');
+        await this.initializeServices();
+        
+        if (!this.gmailService || !this.gmailService.isConnected()) {
+          new Notice('Failed to connect to Gmail MCP');
+          this.updateStatus('Gmail offline');
+          return;
+        }
+      }
+      
+      // Read the specific email by ID to get full content
+      console.log(`Reading email with ID: ${emailId}`);
+      const email = await this.gmailService.readEmail(emailId);
+      
+      if (!email || !email.success) {
+        new Notice('Could not find the original email. It may have been deleted.');
+        this.updateStatus('Ready');
+        return;
+      }
+      
+      const emailData = email.email || email;
+      console.log('Found email:', emailData.subject);
+      
+      new Notice('Extracting tasks and summary...');
+      
+      // Get email content from readEmail (which returns the full body)
+      const emailContent = emailData.body || emailData.snippet || '';
+      
+      // Extract tasks using Claude (or fallback)
+      let extraction: TaskExtractionResult;
+      
+      if (this.claudeExtractor && this.settings.anthropicApiKey) {
+        console.log('Reprocessing with Claude...');
+        extraction = await this.claudeExtractor.extractTasks(emailContent, email.subject);
+        console.log(`Extracted ${extraction.tasks.length} tasks with ${extraction.confidence}% confidence`);
+      } else {
+        console.log('Claude extractor not available for reprocessing');
+        new Notice('❌ Claude AI not configured - cannot reprocess');
+        return;
+      }
+      
+      // Format the new content
+      const newContent = this.formatMeetingNote(emailData, extraction);
+      
+      // Replace the file content
+      await this.app.vault.modify(activeFile, newContent);
+      
+      // Update stats
+      const taskCount = extraction.tasks.length;
+      const highPriorityCount = extraction.tasks.filter(t => t.priority === 'high').length;
+      
+      this.updateStatus(`Reprocessed: ${taskCount} tasks`);
+      new Notice(`✅ Reprocessed successfully! Found ${taskCount} task${taskCount !== 1 ? 's' : ''} (${highPriorityCount} high priority)`);
+      
+    } catch (error) {
+      console.error('Failed to reprocess meeting note:', error);
+      new Notice(`Error reprocessing: ${error.message}`);
+      this.updateStatus('Error');
+    }
   }
   
   async resetProcessedEmails() {

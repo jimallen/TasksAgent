@@ -27,7 +27,11 @@
 1. Install plugin in Obsidian
 2. Start unified daemon: `npm run daemon` (includes Gmail MCP)
 3. Configure settings (API keys, folders)
-4. Click ribbon icon or use command palette to process emails
+4. Process emails via:
+   - Command Palette: `Cmd/Ctrl + P` → "📧 Process meeting emails now"
+   - Keyboard Shortcut: `Cmd/Ctrl + Shift + M`
+   - Ribbon Icon: Click the refresh icon
+   - Quick Process: "⚡ Quick process (last 24 hours)" for recent emails
 
 ### For Developers
 ```bash
@@ -237,9 +241,22 @@ node build.js
 - Configurable dashboard filtering
 - Ready for Obsidian Community Plugins
 
-## Recent Changes (Latest Session - 2025-08-29)
+## Recent Changes
 
-### Filter Button Count Badges
+### Command Palette Enhancements (2025-09-02)
+- **New Commands**: Added user-friendly commands with emoji icons for better visibility
+- **Keyboard Shortcut**: `Cmd/Ctrl + Shift + M` for quick email processing
+- **Quick Process**: New 24-hour quick process command for recent emails only
+- **Improved Feedback**: Better progress notifications with email counts and pluralization
+- **Status Updates**: Real-time status bar updates during processing
+
+### API Key Integration (2025-08-30)
+- **Plugin Settings**: API key now stored in plugin configuration
+- **Daemon Communication**: Key passed via HTTP `/trigger` endpoint
+- **No .env Required**: Daemon receives key dynamically from plugin
+- **Result**: Full Claude AI extraction without fallback mode
+
+### Filter Button Count Badges (2025-08-29)
 - Added real-time count badges to all filter buttons
 - Badges show total count regardless of active filter
 - Counts update with 150ms debouncing for performance
@@ -247,7 +264,7 @@ node build.js
 - Color-coded badges match filter types
 - Support for "Past Due" filter with overdue task counting
 
-### Dashboard UI Simplification
+### Dashboard UI Simplification (2025-08-29)
 - **Removed redundant stats cards** at top of dashboard
 - Metrics now integrated directly into filter buttons
 - Cleaner interface with less visual redundancy

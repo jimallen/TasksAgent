@@ -905,8 +905,13 @@ export class GmailMcpService extends EventEmitter {
       arguments: params,
     });
     
-    // Parse and return email
-    return this.parseEmailResult(result);
+    // Parse and return email, preserving the message ID from params
+    const email = this.parseEmailResult(result);
+    if (email.id.startsWith('email_') && params.messageId) {
+      // Replace placeholder ID with actual message ID
+      email.id = params.messageId;
+    }
+    return email;
   }
 
   /**
@@ -979,7 +984,7 @@ export class GmailMcpService extends EventEmitter {
    */
   private parseEmailResult(result: unknown): GmailMessage {
     // Implementation will be refined based on actual MCP response format
-    logger.debug('[GmailMCP] Parsing email result:', result);
+    logger.info('[GmailMCP] Parsing email result:', JSON.stringify(result).substring(0, 500));
     
     if (!result || typeof result !== 'object') {
       throw new Error('Invalid email response');
@@ -987,10 +992,56 @@ export class GmailMcpService extends EventEmitter {
     
     // Handle MCP response format
     const response = result as any;
+    
+    // Check if response is the weird object with numeric keys
+    if (typeof response === 'object' && '0' in response) {
+      // Convert numeric-keyed object to string
+      const chars = [];
+      let i = 0;
+      while (i.toString() in response) {
+        chars.push(response[i.toString()]);
+        i++;
+      }
+      const jsonStr = chars.join('');
+      logger.info('[GmailMCP] Converted numeric-keyed object to string:', jsonStr.substring(0, 200));
+      
+      try {
+        const parsed = JSON.parse(jsonStr);
+        if (parsed.content && Array.isArray(parsed.content)) {
+          const textContent = parsed.content[0]?.text;
+          if (textContent) {
+            logger.info('[GmailMCP] Text content found, length:', textContent.length);
+            return this.parseTextToMessage(textContent);
+          }
+        }
+      } catch (e) {
+        logger.error('[GmailMCP] Failed to parse converted string:', e);
+      }
+    }
+    
+    // Normal response handling
     if (response.content && Array.isArray(response.content)) {
-      const textContent = response.content[0]?.text;
+      let textContent = response.content[0]?.text;
+      
+      // Check if textContent is the weird numeric-keyed object
+      if (textContent && typeof textContent === 'object' && '0' in textContent) {
+        // Convert numeric-keyed object to string
+        const chars = [];
+        let i = 0;
+        while (i.toString() in textContent) {
+          chars.push(textContent[i.toString()]);
+          i++;
+        }
+        textContent = chars.join('');
+        logger.info('[GmailMCP] Converted text content from numeric-keyed object, new length:', textContent.length);
+      }
+      
       if (textContent) {
-        return this.parseTextToMessage(textContent);
+        logger.info('[GmailMCP] Text content type:', typeof textContent);
+        logger.info('[GmailMCP] Text content found, length:', typeof textContent === 'string' ? textContent.length : 'not a string');
+        const message = this.parseTextToMessage(textContent);
+        logger.info('[GmailMCP] Parsed message has body:', !!message.body, 'body length:', message.body ? message.body.length : 0);
+        return message;
       }
     }
     
@@ -1002,8 +1053,23 @@ export class GmailMcpService extends EventEmitter {
    * @param text - Text content from MCP
    * @returns Array of parsed messages
    */
-  private parseTextToMessages(text: string): GmailMessage[] {
+  private parseTextToMessages(text: string | any): GmailMessage[] {
+    // Check if text is the weird numeric-keyed object
+    if (typeof text === 'object' && text !== null && '0' in text) {
+      // Convert numeric-keyed object to string
+      const chars = [];
+      let i = 0;
+      while (i.toString() in text) {
+        chars.push(text[i.toString()]);
+        i++;
+      }
+      text = chars.join('');
+      logger.info('[GmailMCP] Converted numeric-keyed object to string in parseTextToMessages');
+    }
+    
     // This will be refined based on actual Gmail MCP output format
+    logger.info('[GmailMCP] parseTextToMessages input length:', typeof text === 'string' ? text.length : 'not a string');
+    logger.info('[GmailMCP] First 1000 chars of text:', typeof text === 'string' ? text.substring(0, 1000) : 'not a string');
     const messages: GmailMessage[] = [];
     const blocks = text.split('\n\n');
     
@@ -1036,27 +1102,97 @@ export class GmailMcpService extends EventEmitter {
    * @param text - Text content from MCP
    * @returns Parsed message
    */
-  private parseTextToMessage(text: string): GmailMessage {
-    // This will be refined based on actual Gmail MCP output format
-    const message: Partial<GmailMessage> = {};
-    const lines = text.split('\n');
+  private parseTextToMessage(text: string | any): GmailMessage {
+    // Check if text is the weird numeric-keyed object
+    if (typeof text === 'object' && text !== null && '0' in text) {
+      // Convert numeric-keyed object to string
+      const chars = [];
+      let i = 0;
+      while (i.toString() in text) {
+        chars.push(text[i.toString()]);
+        i++;
+      }
+      text = chars.join('');
+      logger.info('[GmailMCP] Converted numeric-keyed object to string, length:', text.length);
+    }
     
-    for (const line of lines) {
-      if (line.startsWith('ID: ')) {
-        message.id = line.substring(4);
+    logger.info('[GmailMCP] Parsing text to message, length:', typeof text === 'string' ? text.length : 'not a string');
+    logger.info('[GmailMCP] First 500 chars:', typeof text === 'string' ? text.substring(0, 500) : 'not a string');
+    
+    // Try to parse as JSON first (common MCP format)
+    try {
+      const parsed = JSON.parse(text);
+      // Check for various ID field names that Gmail MCP might use
+      const messageId = parsed.id || parsed.messageId || parsed.message_id || parsed.emailId || parsed.email_id;
+      if (messageId || parsed.subject || parsed.from) {
+        return {
+          id: messageId || 'email_' + Date.now(),
+          subject: parsed.subject || '',
+          from: parsed.from || '',
+          to: parsed.to || '',
+          date: parsed.date || '',
+          body: parsed.body || parsed.content || parsed.snippet || '',
+          snippet: parsed.snippet,
+          attachments: parsed.attachments || []
+        };
+      }
+    } catch (e) {
+      // Not JSON, try text parsing
+    }
+    
+    // Parse as formatted text
+    const message: Partial<GmailMessage> = {};
+    
+    // Check if the entire text is the email content (common for read_email)
+    if (!text.includes('ID:') && !text.includes('Subject:')) {
+      // The entire text is likely the email body
+      // Extract message ID from the request context or generate a placeholder
+      message.id = 'email_' + Date.now();
+      message.body = text;
+      message.subject = 'Email Content';
+      return message as GmailMessage;
+    }
+    
+    // Parse structured text format
+    const lines = text.split('\n');
+    let bodyStartIndex = -1;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] || '';
+      if (line.startsWith('ID: ') || line.startsWith('Thread ID: ')) {
+        message.id = line.substring(line.indexOf(':') + 1).trim();
       } else if (line.startsWith('Subject: ')) {
-        message.subject = line.substring(9);
+        message.subject = line.substring(9).trim();
       } else if (line.startsWith('From: ')) {
-        message.from = line.substring(6);
+        message.from = line.substring(6).trim();
+      } else if (line.startsWith('To: ')) {
+        message.to = line.substring(4).trim();
       } else if (line.startsWith('Date: ')) {
-        message.date = line.substring(6);
+        message.date = line.substring(6).trim();
       } else if (line.startsWith('Body: ')) {
-        message.body = line.substring(6);
+        message.body = lines.slice(i).join('\n').substring(6).trim();
+        break;
+      } else if (line === '' && i > 0 && bodyStartIndex === -1) {
+        // Empty line after headers indicates start of body
+        bodyStartIndex = i + 1;
       }
     }
     
+    // If we found a body start index but didn't find "Body:" prefix, take everything after the empty line
+    if (!message.body && bodyStartIndex > 0) {
+      message.body = lines.slice(bodyStartIndex).join('\n');
+    }
+    
+    // If no structured format found, treat entire text as body
+    if (!message.id && !message.subject) {
+      message.id = 'email_' + Date.now();
+      message.body = text;
+      message.subject = 'Email Content';
+    }
+    
     if (!message.id) {
-      throw new Error('No message ID found in response');
+      logger.warn('[GmailMCP] No message ID found, generating placeholder');
+      message.id = 'email_' + Date.now();
     }
     
     return message as GmailMessage;

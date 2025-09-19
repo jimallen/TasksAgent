@@ -226,7 +226,7 @@ async function validatePlugin() {
   log('🔍 Validating plugin...', 'blue');
   
   // Check for required files
-  const requiredFiles = ['manifest.json', 'src/main.ts'];
+  const requiredFiles = ['manifest.json', 'src/main-daemon-style.ts'];
   for (const file of requiredFiles) {
     if (!fs.existsSync(file)) {
       log(`❌ Missing required file: ${file}`, 'red');

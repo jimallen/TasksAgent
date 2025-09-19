@@ -102,9 +102,14 @@ export class DaemonHttpServer {
     // Trigger email processing
     this.app.post('/trigger', async (req, res) => {
       try {
-        const { source, quiet = false, lookbackHours } = req.body;
+        const { source, quiet = false, lookbackHours, anthropicApiKey } = req.body;
         
         logger.info(`Processing triggered by ${source || 'unknown'}${quiet ? ' (quiet mode)' : ''}${lookbackHours ? ` (${lookbackHours} hours)` : ''}`);
+        
+        // Set API key in environment if provided
+        if (anthropicApiKey) {
+          process.env['ANTHROPIC_API_KEY'] = anthropicApiKey;
+        }
         
         // Trigger processing and get the result directly
         const processingResult = await this.daemonService.processEmails(true, quiet, lookbackHours);

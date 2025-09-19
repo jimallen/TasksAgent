@@ -36,6 +36,9 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 - ✨ **Smooth Task Completion**: Fade-out animation preserves scroll position
 - 📊 **Real-time Statistics**: Updates without page refresh
 - 🔒 **Secure Configuration**: API keys stored locally, gitignored for safety
+- ⌨️ **Keyboard Shortcuts**: `Cmd/Ctrl + Shift + M` for quick email processing
+- 📧 **Enhanced Commands**: User-friendly command palette with emoji icons
+- ⚡ **Quick Process**: 24-hour lookback command for recent emails only
 
 ### NEW: Unified Daemon Service
 - 🖥️ **Single Service Architecture**: One command starts everything including Gmail MCP
@@ -61,7 +64,7 @@ An automated agent that monitors Gmail for meeting transcripts, extracts actiona
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/yourusername/meeting-transcript-agent.git
+git clone https://github.com/jimallen/meeting-transcript-agent.git
 cd meeting-transcript-agent
 npm install
 ```
@@ -317,6 +320,24 @@ curl -X POST http://localhost:3002/gmail/search \
   -d '{"query": "subject:meeting", "maxResults": 10}'
 ```
 
+### Obsidian Plugin Commands
+
+The plugin provides several commands accessible via the command palette:
+
+```bash
+# Command Palette (Cmd/Ctrl + P)
+📧 Process meeting emails now         # Main processing command
+⚡ Quick process (last 24 hours)      # Process recent emails only
+Open task dashboard                   # View your tasks
+Reset processed emails                # Clear cache for reprocessing
+
+# Keyboard Shortcuts
+Cmd/Ctrl + Shift + M                 # Quick trigger email processing
+
+# Ribbon Icons
+Dashboard icon                        # Open task dashboard
+```
+
 ### TUI Dashboard Controls
 
 When running with `npm run daemon`, the terminal interface provides:
@@ -336,9 +357,18 @@ When running with `npm run daemon`, the terminal interface provides:
 
 ```bash
 # Install as systemd service (Linux)
+# Will prompt for Obsidian vault path during installation
 sudo npm run daemon:install
 sudo systemctl start meeting-transcript-agent@$USER
 sudo systemctl enable meeting-transcript-agent@$USER
+
+# Update service after code changes
+sudo npm run daemon:update    # Updates code and restarts service
+# OR manually reinstall
+sudo npm run daemon:install   # Auto-restarts if already running
+
+# To uninstall the service
+sudo npm run daemon:uninstall
 ```
 
 See [Daemon Service Documentation](docs/daemon-service.md) for details.
@@ -610,7 +640,7 @@ MIT License - see LICENSE file for details
 
 ## 💬 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/meeting-transcript-agent/issues)
+- **Issues**: [GitHub Issues](https://github.com/jimallen/meeting-transcript-agent/issues)
 - **Documentation**: [docs/](docs/) directory
 - **AI Context**: [CLAUDE.md](CLAUDE.md)
 - **Architecture**: [System Design](docs/system-architecture.md)

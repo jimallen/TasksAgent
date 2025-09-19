@@ -226,8 +226,18 @@ npm run daemon:headless  # No UI, quiet mode
 
 ### 3. Systemd Service (Linux)
 ```bash
+# Install service with dynamic vault configuration
 sudo npm run daemon:install
-sudo systemctl start meeting-transcript-agent
+# Script will prompt for Obsidian vault path or read from .env
+
+# Start the service
+sudo systemctl start meeting-transcript-agent@$USER
+
+# Enable auto-start on boot
+sudo systemctl enable meeting-transcript-agent@$USER
+
+# Uninstall the service
+sudo npm run daemon:uninstall
 ```
 
 ### 4. Docker Container
@@ -337,6 +347,46 @@ TZ=America/New_York
 - **Concurrent Requests**: Single-threaded by design
 - **Multi-user**: Requires separate instances
 
+## Systemd Service Installation
+
+### Dynamic Configuration
+The installation script (`scripts/install-service.sh`) provides intelligent service configuration:
+
+1. **User Detection**: Uses `$SUDO_USER` to properly identify the actual user (not root)
+2. **Vault Path Discovery**: 
+   - First checks `.env` file for `OBSIDIAN_VAULT_PATH`
+   - Prompts interactively if not found
+   - Validates the path exists
+3. **Service File Generation**: Creates a custom systemd service file with:
+   - Specific `ReadWritePaths` for the user's vault
+   - Proper security restrictions (`ProtectSystem`, `ProtectHome`)
+   - User-specific working directory
+4. **Build Process**: Runs `npm run build` as the correct user, not root
+
+### Service Management Commands
+```bash
+# Install (prompts for vault path)
+sudo npm run daemon:install
+
+# Start/stop/restart
+sudo systemctl start meeting-transcript-agent@$USER
+sudo systemctl stop meeting-transcript-agent@$USER
+sudo systemctl restart meeting-transcript-agent@$USER
+
+# View logs
+sudo journalctl -u meeting-transcript-agent@$USER -f
+
+# Check status
+sudo systemctl status meeting-transcript-agent@$USER
+
+# Enable/disable auto-start
+sudo systemctl enable meeting-transcript-agent@$USER
+sudo systemctl disable meeting-transcript-agent@$USER
+
+# Uninstall completely
+sudo npm run daemon:uninstall
+```
+
 ## Security Considerations
 
 ### Authentication & Tokens
@@ -400,6 +450,50 @@ curl http://localhost:3002/status
 
 ## Recent Enhancements
 
+### API Key Runtime Checking Fix (2025-09-02)
+- **Issue**: ClaudeTaskExtractor singleton created at module load, missing dynamic API keys
+- **Fix**: Modified to check API key at runtime via `getApiKey()` method
+- **Impact**: Enables proper API key passing from Obsidian plugin
+- **Result**: Claude AI extraction now works when triggered from plugin
+
+### Obsidian Plugin Command Improvements (2025-09-02)
+- **User Experience**: Enhanced command palette with emoji icons and better naming
+- **Quick Access**: Added keyboard shortcut `Cmd/Ctrl + Shift + M`
+- **Quick Process**: New 24-hour processing command for recent emails
+- **Feedback**: Improved notifications with counts and status updates
+
+### Service Update Scripts (2025-09-02)
+- **New Script**: `scripts/update-service.sh` for code updates without full reinstall
+- **Install Enhancement**: Auto-restart service if running during install
+- **Build Verification**: Added error handling for TypeScript compilation
+- **NPM Command**: `npm run daemon:update` for easy updates
+
+### Systemd Service Improvements (2025-09-01)
+- **Dynamic Vault Configuration**: Install script now prompts for vault path
+- **User Detection**: Proper handling of sudo user (uses $SUDO_USER not root)
+- **Security**: Service file generated with specific vault write permissions
+- **Build Process**: Runs npm build as correct user, not root
+- **Installation**: Service automatically configured for user's Obsidian vault
+
+### API Key Integration (2025-08-30)
+- **Feature**: Plugin now passes Anthropic API key to daemon
+- **Configuration**: API key stored in plugin settings
+- **Processing**: Daemon receives key via `/trigger` endpoint
+- **Result**: Full Claude AI task extraction enabled
+
+### Obsidian Plugin Updates (2025-08-29)
+
+#### Filter Button Count Badges
+- **Feature**: Real-time count badges on all filter buttons
+- **Performance**: 150ms debounced updates
+- **Behavior**: Zero counts hide badges automatically
+- **Visual**: Color-coded badges match filter types
+
+#### Dashboard UI Simplification
+- **Removed**: Redundant stats cards at top
+- **Integrated**: Metrics directly in filter buttons
+- **Result**: Cleaner interface with better information density
+
 ### Obsidian Plugin Updates (2025-08-27)
 
 #### Multi-Name Task Filtering
@@ -418,7 +512,6 @@ curl http://localhost:3002/status
 - **data.json**: Now gitignored for API key protection
 - **Template**: data.json.example provided for setup
 - **Defaults**: Removed hardcoded personal information
-4. Verify health endpoints
 
 ## Future Enhancements
 
