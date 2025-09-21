@@ -11,7 +11,8 @@
     "build:dev": "node build.js",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist main.js",
-    "release": "npm run clean && npm run build:release"
+    "release": "npm run clean && npm run build:release",
+    "deploy": "./deploy.sh"
   },
   "keywords": [
     "obsidian",
