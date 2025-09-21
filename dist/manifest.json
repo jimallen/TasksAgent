@@ -1,0 +1,11 @@
+{
+  "id": "obsidian-meeting-tasks",
+  "name": "Meeting Tasks",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "description": "Automatically import meeting tasks and notes from TasksAgent service into your Obsidian vault",
+  "author": "TasksAgent Team",
+  "authorUrl": "https://github.com/jimallen/obsidian-meeting-tasks",
+  "fundingUrl": "",
+  "isDesktopOnly": true
+}

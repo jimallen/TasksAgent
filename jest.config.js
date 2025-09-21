@@ -1,32 +1,46 @@
 /** @type {import('jest').Config} */
 export default {
   preset: 'ts-jest',
-  testEnvironment: 'node',
+  testEnvironment: 'jsdom',
   roots: ['<rootDir>/src'],
-  testMatch: ['**/__tests__/**/*.ts', '**/*.spec.ts'],
+  testMatch: [
+    '**/__tests__/**/*.+(ts|tsx|js)',
+    '**/?(*.)+(spec|test).+(ts|tsx|js)'
+  ],
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
+    '^.+\\.(ts|tsx)$': ['ts-jest', {
       tsconfig: {
         module: 'commonjs',
-        esModuleInterop: true
+        target: 'es2018',
+        lib: ['es2018', 'dom'],
+        esModuleInterop: true,
+        strict: true,
+        skipLibCheck: true,
+        moduleResolution: 'node',
+        allowJs: true,
+        noImplicitAny: true
       }
     }]
   },
   collectCoverageFrom: [
-    'src/**/*.ts',
+    'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
-    '!src/**/*.spec.ts',
-    '!src/index.ts'
+    '!src/**/*.test.{ts,tsx}',
+    '!src/**/__tests__/**'
   ],
-  coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
-  moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1'
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80
+    }
   },
-  extensionsToTreatAsEsm: ['.ts'],
-  moduleFileExtensions: ['ts', 'js', 'json', 'node'],
-  verbose: true,
+  moduleNameMapper: {
+    'obsidian': '<rootDir>/src/__mocks__/obsidian.js',
+    '^@/(.*)$': '<rootDir>/src/$1'
+  },
+  setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
   testTimeout: 10000,
-  clearMocks: true,
-  restoreMocks: true
+  verbose: true
 };

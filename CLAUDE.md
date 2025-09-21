@@ -1,284 +1,357 @@
-# CLAUDE.md
+# CLAUDE.md - Obsidian Meeting Tasks Plugin
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Project Overview
+**Obsidian Meeting Tasks Plugin** - A standalone Obsidian plugin that directly fetches meeting emails from Gmail using OAuth, extracts actionable tasks using Claude AI, and creates structured meeting notes organized by year/month with a visual task dashboard. No external daemon required.
 
-## Project: Meeting Transcript Agent
-Automated system that monitors Gmail for meeting transcripts, extracts actionable tasks using Claude AI, and creates organized notes in Obsidian with optional daemon service and TUI monitoring.
+## Current Status
+- ✅ **Production Ready** - Plugin fully functional with all features implemented
+- ✅ **Standalone Operation** - Direct Gmail OAuth integration, no daemon required
+- ✅ **Claude 4 Support** - Supports Claude 3.5 Haiku, Sonnet 4, and Opus 4.1
+- ✅ **Task Dashboard** - Visual task management with filtering and statistics
+- ✅ **Organized Notes** - Meeting notes in Meetings/year/month/ folder structure
+- ✅ **Flexible Time Formats** - Lookback time supports hours, days, weeks, months (6h, 3d, 2w, 1M)
+- ✅ **Email Reprocessing** - Ability to reprocess specific emails by ID
+- ✅ **TypeScript Compliant** - Full TypeScript type checking enabled
+- ✅ **UI Enhancements** - Edit buttons, proper flexbox layout, theme-aware styling
+- ✅ **Priority Support** - Both custom emojis and Obsidian's built-in syntax
 
-## Essential Commands
+## 📐 Documentation
 
-### Development & Testing
+- **[Quick Start Guide](./QUICK_START.md)** - Get started in 5 minutes
+- **[Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md)** - Comprehensive build instructions
+- **[System Architecture](./docs/system-architecture.md)** - Technical architecture and diagrams
+- **[HTTP Server Architecture](../docs/ARCHITECTURE_HTTP_SERVERS.md)** - Parent project architecture
+
+## Quick Start
+
+### For Users
+1. Install plugin in Obsidian
+2. Configure settings:
+   - Add your Anthropic API key for Claude AI
+   - Set up Google OAuth credentials (Client ID and Secret)
+   - Configure lookback time (e.g., "3d" for 3 days, "1M" for 1 month)
+   - Set notes folder (default: "Meetings")
+3. Authenticate with Gmail (one-time setup)
+4. Process emails via:
+   - Command Palette: `Cmd/Ctrl + P` → "📧 Process meeting emails now"
+   - Keyboard Shortcut: `Cmd/Ctrl + Shift + M`
+   - Ribbon Icon: Click the refresh icon
+   - Quick Process: "⚡ Quick process (last 24 hours)" for recent emails
+
+### For Developers
 ```bash
-npm run build           # TypeScript compilation (required before running)
-npm run typecheck       # Type checking without emitting files
-npm run lint            # ESLint with TypeScript rules
-npm run lint:fix        # Auto-fix linting issues
-npm run format          # Prettier formatting
-npm test               # Run Jest tests
-npm run test:coverage  # Test coverage report
+# Install dependencies
+npm install
+
+# Build plugin
+npm run build
+node esbuild.config.js production
+
+# Deploy to vault
+cp main.js manifest.json styles.css "/path/to/vault/.obsidian/plugins/meeting-tasks/"
+
+# Reload Obsidian or use Ctrl/Cmd+R
 ```
 
-### Running the Application
-```bash
-npm run start:test     # Test mode - verify all connections
-npm run start:once     # Process emails once and exit
-npm start              # Classic scheduler mode (9 AM, 1 PM, 5 PM)
-npm run daemon         # Daemon with TUI dashboard - includes Gmail MCP (recommended)
-npm run daemon:headless # Daemon without UI - includes Gmail MCP (for servers)
+## Key Files
 
-# With custom ports (NEW)
-npm run daemon -- --http-port 8080 --gmail-mcp-port 9000
-npm run daemon:headless -- --http-port 8080
+### Core Plugin Files
+- `src/main.ts` - Main plugin entry point with Gmail OAuth integration
+- `src/claudeExtractor.ts` - Claude AI task extraction logic
+- `src/taskDashboard.ts` - Task dashboard view component
+- `src/gmailService.ts` - Direct Gmail API integration with OAuth
 
-# View configuration
-npm run daemon -- --config-dump
-npm run daemon -- --help
+### Configuration Files
+- `manifest.json` - Plugin metadata
+- `esbuild.config.js` - Build configuration
+- `styles.css` - Main plugin styles and dashboard styling
+- `data.json` - Plugin settings and processed email tracking
+
+## Features
+
+### Task Extraction
+- **Intelligent AI Processing**: Uses Claude 4 models for accurate task extraction
+- **Comprehensive Extraction**: 
+  - Tasks with assignees and priorities
+  - Meeting participants
+  - Key decisions
+  - Next steps
+  - Confidence scores
+- **Fallback Mode**: Basic extraction if Claude API unavailable
+
+### Task Dashboard
+- **Visual Organization**:
+  - Priority-based sections (High/Medium/Low)
+  - Assignee-based task cards
+  - Statistics overview (Total, Completed, High Priority, Overdue)
+- **Interactive Features**:
+  - Click to complete tasks
+  - Filter by priority, date, assignee
+  - Collapsible sections
+  - In-line task editing (priority and assignee)
+  - Toggle between "My Tasks" and "All Tasks" views
+- **UI Improvements** (Recent):
+  - Edit button in top-left corner of each task
+  - Proper flexbox layout for maintainability
+  - Theme-aware styling with CSS variables
+  - High-contrast metadata tags
+  - Support for Obsidian's built-in priority indicators (⏫ ⏬ 🔼 🔽)
+- **Personalization**:
+  - "My Tasks" filtering with dashboard toggle
+  - Configurable user name for task filtering
+  - Scans entire vault for tasks (not just Meetings folder)
+
+### Gmail Integration
+- **Direct OAuth**: Built-in Gmail OAuth authentication
+- **No External Dependencies**: Plugin handles all Gmail API calls directly
+- **Smart Search**:
+  - Multiple search patterns
+  - Flexible date-based lookback (hours, days, weeks, months)
+  - Deduplication of processed emails
+- **Email Reprocessing**: Can reprocess specific emails by ID
+- **Note Organization**: Creates year/month folder structure automatically
+
+## Configuration
+
+### Plugin Settings
+```typescript
+{
+  // Email Processing
+  lookbackTime: "1M",               // Flexible time format: 6h, 3d, 2w, 1M (default: 1 month)
+  daemonUrl: "http://localhost:3002",  // Daemon service endpoint (no longer used)
+  gmailLabels: "transcript",       // Gmail label to filter (default: 'transcript')
+
+  // Claude AI
+  anthropicApiKey: "sk-ant-...",   // Your API key
+  claudeModel: "claude-3-5-haiku-20241022",  // Default model
+
+  // Organization
+  notesFolder: "Meetings",          // Where to store notes (creates year/month subdirectories)
+
+  // Dashboard
+  dashboardShowOnlyMyTasks: true,   // Filter to personal tasks
+  dashboardMyName: "Jim Allen, the group",  // Your name(s) for filtering
+
+  // Google OAuth (direct integration)
+  googleClientId: "...",            // Your OAuth client ID
+  googleClientSecret: "...",        // Your OAuth client secret
 ```
 
-### Gmail MCP Setup
-```bash
-npx @gongrzhe/server-gmail-autoauth-mcp  # Authenticate Gmail MCP (one-time setup)
+### Time Format Support
+The lookback time now supports flexible formats:
+- **Hours**: `6h`, `12h`, `24h`
+- **Days**: `1d`, `3d`, `7d`
+- **Weeks**: `1w`, `2w`, `4w`
+- **Months**: `1M`, `3M`, `6M`
+
+Examples: `"3d"` = 3 days, `"2w"` = 2 weeks, `"1M"` = 1 month
+
+### Available Claude Models
+- `claude-3-5-haiku-20241022` - Fast & economical (default)
+- `claude-sonnet-4-20250514` - Balanced performance (Claude 4)
+- `claude-opus-4-1-20250805` - Most capable (Claude 4)
+
+### Meeting Note Organization
+Meeting notes are automatically organized in a year/month folder structure:
 ```
-**Full setup guide**: See [docs/GMAIL_SETUP.md](docs/GMAIL_SETUP.md) for detailed OAuth configuration
-
-**Note**: Gmail MCP is now integrated into the daemon. No separate service needed!
-
-## Architecture Overview
-
-### Unified Daemon Architecture (NEW)
-The system now uses a single unified daemon with integrated Gmail MCP:
-
-1. **Unified Daemon** (`src/daemon.ts`) - Main entry point with CLI argument parsing
-2. **Gmail MCP Service** (`src/daemon/gmailMcpService.ts`) - Child process manager (configurable port)
-3. **HTTP Server** (`src/daemon/httpServer.ts`) - All endpoints (configurable port, default 3002)
-4. **Email Processing Pipeline**:
-   - **GmailService** (`src/services/gmailService.ts`) - Connects to daemon's Gmail endpoints
-   - **Email Parser** (`src/parsers/emailParser.ts`) - Identifies meeting transcripts
-   - **Claude AI Extractor** (`src/extractors/claudeTaskExtractor.ts`) - AI task extraction
-   - **Obsidian Service** (`src/services/obsidianService.ts`) - Creates notes in vault
-5. **State Manager** (`src/database/stateManager.ts`) - SQLite deduplication and stats
-6. **TUI Interface** (`src/tui/interface.ts`) - Optional terminal dashboard
-
-### Daemon Service Endpoints
-- **Configurable Ports**: HTTP and Gmail MCP ports can be configured via CLI or environment
-  - HTTP Server: Default 3002 (--http-port or HTTP_SERVER_PORT)
-  - Gmail MCP: Default 3000 (--gmail-mcp-port or GMAIL_MCP_PORT)
-- **HTTP API Endpoints**:
-  - `/health` - Health check endpoint for monitoring
-  - `/status` - Daemon status and statistics
-  - `/trigger` - External trigger for email processing (used by Obsidian plugin)
-- **Single Service**: `npm run daemon` starts everything
-
-### Daemon Service Architecture
-- `src/daemon.ts` - Entry point with CLI argument parsing and port configuration
-- `src/cli/argumentParser.ts` - Comprehensive CLI parsing with validation
-- `src/cli/portValidator.ts` - Port range validation and conflict detection
-- `src/config/config.ts` - Priority-based configuration resolution
-- `src/daemon/service.ts` - Background service with manual trigger support
-- `src/daemon/httpServer.ts` - HTTP API for external control (configurable port)
-- `src/daemon/gmailMcpService.ts` - Gmail MCP child process manager (configurable port)
-- `src/tui/interface.ts` - blessed-based terminal UI with statistics
-- `daemon-stats.db` - Persistent metrics storage
-
-### Key Design Patterns
-- **Port Configuration**: Three-tier priority system (CLI > Environment > Default)
-- **MCP Protocol**: Gmail integration uses Model Context Protocol server
-- **Rate Limiting**: Built-in protection for Gmail API quotas (250 units/sec)
-- **Error Recovery**: Comprehensive error handling with retry logic
-- **State Management**: SQLite for processed email tracking and deduplication
-- **Configurable Platforms**: Plugin settings control which meeting platforms to search
-- **Lookback Hours**: Configurable via plugin settings and passed to daemon API
-
-## Critical Configuration
-
-### Port Configuration (NEW)
-```bash
-# Three ways to configure ports (priority order):
-
-# 1. CLI Arguments (highest priority)
-npm run daemon -- --http-port 8080 --gmail-mcp-port 9000
-
-# 2. Environment Variables
-HTTP_SERVER_PORT=8080 GMAIL_MCP_PORT=9000 npm run daemon
-
-# 3. Default Values (lowest priority)
-# HTTP: 3002, Gmail MCP: 3000
-
-# View active configuration
-npm run daemon -- --config-dump
+Meetings/
+├── 2025/
+│   ├── 01/
+│   │   ├── 2025-01-15-Notes-Team-Standup.md
+│   │   └── 2025-01-20-Notes-Project-Review.md
+│   └── 02/
+│       └── 2025-02-01-Notes-Planning-Session.md
 ```
 
-### Required Environment Variables (.env)
-```bash
-OBSIDIAN_VAULT_PATH=/absolute/path/to/vault  # Required
-ANTHROPIC_API_KEY=sk-ant-api03-xxx          # Recommended for AI extraction
-GMAIL_HOURS_LOOKBACK=120                    # Default: 120 hours (5 days)
+## Common Issues & Solutions
 
-# Optional port configuration
-HTTP_SERVER_PORT=3002                       # HTTP API server port
-GMAIL_MCP_PORT=3000                         # Gmail MCP service port
+### Gmail Authentication
+- Ensure Google OAuth credentials are configured in settings
+- Complete the one-time authentication flow
+- Token is stored locally in plugin data
+- If authentication fails, try clearing token and re-authenticating
+
+### Tasks Not Extracting
+- Verify Anthropic API key in settings
+- Check Claude API usage/limits
+- Try different Claude model
+- Check console for errors
+
+### Dashboard Not Loading
+- Ensure Meetings folder exists
+- Check for valid task format in notes
+- Reload Obsidian (Cmd/Ctrl + R)
+
+## Task Format
+
+### In Meeting Notes
+```markdown
+### 🔴 High Priority
+- [ ] Task description [[@Assignee]] 📅 2024-12-29 ⚠️ 85% #category
+  - Context: Why this task exists
+  > "Original quote from meeting"
 ```
 
-### Gmail MCP Authentication
-OAuth credentials must be in one of:
-- `~/.gmail-mcp/gcp-oauth.keys.json` (preferred)
-- `./gcp-oauth.keys.json` (project root)
+### Task Components
+- `- [ ]` - Checkbox (required)
+- `[[@Assignee]]` - Task owner
+- `📅 YYYY-MM-DD` - Due date
+- `⚠️ XX%` - Confidence score (if < 70%)
+- `#category` - Task category
+- Context and quotes - Additional information
 
-## Common Development Tasks
+## Development Workflow
 
-### Adding New Email Patterns
-Edit `src/parsers/emailParser.ts`:
-- Current patterns: "Notes:", "Recording of", "Transcript for", "Meeting notes"
-- Pattern matching is case-insensitive
+### Quick Build & Deploy
+```bash
+# Production build (recommended)
+node esbuild.config.js production
 
-### Modifying Task Extraction
-Edit `src/extractors/claudeTaskExtractor.ts`:
-- Uses Claude 3 Haiku model by default
-- Structured prompt for consistent task formatting
+# Development build (with source maps)
+node esbuild.config.js development
 
-### Updating Notification Channels
-Edit `src/services/notificationService.ts`:
-- Supported: console, desktop, obsidian, slack
-- Desktop uses `notify-send` on Linux (fixed hint syntax)
+# Type checking (run before commits)
+npm run typecheck
+```
 
-### Database Schema Changes
-Edit `src/database/schema.sql`:
-- Run migrations manually after changes
-- State tracking in `data/state.db`
+### Deployment Options
 
-## Testing Workflow
-1. Verify Gmail connection: `npm run start:test`
-2. Check TypeScript: `npm run typecheck`
-3. Run linter: `npm run lint`
-4. Execute tests: `npm test`
-5. Test email processing: `npm run start:once`
+#### Option 1: Direct Copy
+```bash
+# Build first
+node esbuild.config.js production
 
-## Recent Updates
+# Copy to vault
+cp main.js manifest.json styles.css "/path/to/vault/.obsidian/plugins/meeting-tasks/"
 
-### API Key Runtime Checking Fix (2025-09-02)
-- **Problem Solved**: ClaudeTaskExtractor singleton was missing dynamic API keys from plugin
-- **Implementation**: Modified extractor to check environment at runtime, not constructor
-- **File Changed**: `src/extractors/claudeTaskExtractor.ts`
-- **Impact**: Obsidian plugin API key now properly used for Claude AI extraction
+# Restart Obsidian or use Ctrl/Cmd+R to reload
+```
 
-### Obsidian Plugin Command Enhancements (2025-09-02)
-- **Command Palette**: Added emoji-prefixed commands for better visibility
+#### Option 2: Build Script
+```bash
+# Use the custom build script (includes validation)
+node build.js
+
+# This automatically:
+# - Validates required files
+# - Runs TypeScript checking
+# - Builds with esbuild
+# - Reports any issues
+```
+
+📚 **Full documentation**: See [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md)
+
+### Testing
+1. **Gmail Connection**: Check authentication status in settings
+2. **Email Search**: Use "Process emails" command
+3. **Task Extraction**: Review created meeting notes in year/month folders
+4. **Dashboard**: Open via ribbon icon or command palette
+5. **Email Reprocessing**: Use `reprocessEmailById()` function for specific emails
+
+## Performance Notes
+- Processes up to 100 emails per run
+- Parallel processing in batches of 3-5 for optimal speed
+- Truncates transcripts to 15,000 chars for Claude
+- Caches processed email IDs to avoid duplicates
+- Frontmatter-based tracking with vault-wide scanning
+- Dashboard loads tasks on demand
+- Minimal memory footprint (~50MB)
+
+## Security Considerations
+- **API Keys**: Stored locally in vault's `.obsidian` folder
+- **OAuth Tokens**: Stored in plugin's data.json, never transmitted
+- **No Cloud Storage**: All processing happens locally
+- **Network**: Direct Gmail API calls, no intermediary servers
+
+## Distribution
+- Plugin is generic - no hardcoded personal data
+- Default settings work for any user
+- Configurable dashboard filtering
+- Ready for Obsidian Community Plugins
+
+## Recent Changes
+
+### Performance & Cache Improvements (2025-09-21)
+- **Increased Email Limit**: Max emails increased from 50 to 100 per processing run
+- **Cache Synchronization**: Rename event handler now properly syncs cache when files are moved:
+  - Files moved OUT of Meetings folder: emailId removed from cache
+  - Files moved INTO Meetings folder: emailId added to cache (if exists)
+  - Graceful handling of notes without emailId field
+- **Parallel Processing**: Emails processed in parallel batches for 3x faster performance
+- **Duplicate Prevention**: Frontmatter-based tracking prevents reprocessing of existing notes
+- **Event Handlers**: Delete/rename events maintain cache consistency
+
+### Standalone Plugin Architecture (2025-09-21)
+- **Direct Gmail Integration**: Plugin now operates independently without daemon
+- **OAuth Authentication**: Built-in Gmail OAuth flow within plugin
+- **Folder Organization**: Meeting notes automatically organized in year/month structure
+- **Flexible Time Formats**: Lookback time supports 6h, 3d, 2w, 1M formats
+- **Email Reprocessing**: Added ability to reprocess specific emails by ID
+- **Claude AI Integration**: Direct API calls from plugin, no proxy needed
+
+### Command Palette Enhancements (2025-09-02)
+- **New Commands**: Added user-friendly commands with emoji icons for better visibility
 - **Keyboard Shortcut**: `Cmd/Ctrl + Shift + M` for quick email processing
-- **Quick Process Command**: 24-hour lookback for recent emails only
-- **Improved Notifications**: Detailed feedback with proper pluralization
-- **Status Bar Updates**: Real-time processing status display
-
-### Service Update Enhancements (2025-09-02)
-- **New Update Script**: `scripts/update-service.sh` for code-only updates
-- **Install Script**: Enhanced with auto-restart if service is running
-- **Error Handling**: Build failures now properly caught and reported
-- **NPM Scripts**: Added `daemon:update` for convenient updates
-- **Benefit**: Easy code updates without full service reinstallation
-
-### Systemd Service Improvements (2025-09-01)
-- **Dynamic Service Configuration**: Install script now generates service file based on user's vault path
-- **User Detection Fix**: Proper handling of $SUDO_USER to avoid root installation
-- **Security Enhancements**: Service file grants write access only to specific vault directory
-- **Build Process**: npm build runs as correct user, not root
-- **Installation UX**: Interactive prompt for Obsidian vault path during install
-- **NPM Scripts**: Added `daemon:install` and `daemon:uninstall` for easy service management
-- **Uninstall Script**: Clean removal of systemd service with proper cleanup
+- **Quick Process**: New 24-hour quick process command for recent emails only
+- **Improved Feedback**: Better progress notifications with email counts and pluralization
+- **Status Updates**: Real-time status bar updates during processing
 
 ### API Key Integration (2025-08-30)
-- **Plugin-to-Daemon Communication**: API key now passed from plugin settings
-- **Dynamic Configuration**: No need for .env file API key
-- **HTTP Endpoint**: `/trigger` accepts `anthropicApiKey` parameter
-- **Result**: Full Claude AI task extraction without fallback mode
+- **Plugin Settings**: API key now stored in plugin configuration
+- **Daemon Communication**: Key passed via HTTP `/trigger` endpoint
+- **No .env Required**: Daemon receives key dynamically from plugin
+- **Result**: Full Claude AI extraction without fallback mode
 
-### Filter Button Enhancements (2025-08-29)
-- **Count Badges**: Real-time task counts on filter buttons
-- **Dashboard Simplification**: Removed redundant stats cards
-- **Performance**: 150ms debounced updates for smooth UX
-- **Visual Design**: Color-coded badges match filter types
+### Filter Button Count Badges (2025-08-29)
+- Added real-time count badges to all filter buttons
+- Badges show total count regardless of active filter
+- Counts update with 150ms debouncing for performance
+- Zero counts hide badges automatically
+- Color-coded badges match filter types
+- Support for "Past Due" filter with overdue task counting
 
-### Obsidian Plugin Enhancements (2025-08-27)
-- **Multi-Name Task Filtering**: Support comma-separated names in "My Tasks" filter
-  - Configuration: `dashboardMyName: "name1, name2, the group"`
-  - Shows tasks assigned to any specified name
-- **Smooth Task Completion**: Tasks fade out without page refresh
-  - 0.3s animation preserves scroll position
-  - Empty cards/sections auto-remove
-- **Security Improvements**: 
-  - `obsidian-plugin/data.json` now gitignored
-  - `data.json.example` template provided
-  - Removed hardcoded defaults from `taskFilter.ts`
+### Dashboard UI Simplification (2025-08-29)
+- **Removed redundant stats cards** at top of dashboard
+- Metrics now integrated directly into filter buttons
+- Cleaner interface with less visual redundancy
+- Improved information density
 
-## Troubleshooting Guide
+### Dashboard UI Improvements
+- Fixed edit button placement - now in top-left corner of each task item
+- Removed inline styles for better maintainability
+- Implemented proper flexbox layout structure
+- Fixed button contrast issues with theme-aware CSS variables
+- Enhanced metadata tag visibility with high-contrast colors
+- Added support for Obsidian's built-in priority syntax
 
-### Gmail Not Finding Emails
-- Check lookback hours in Obsidian plugin settings (passed to daemon)
-- Verify enabled meeting platforms in plugin settings
-- Verify patterns in `src/parsers/emailParser.ts`
-- Check Gmail MCP service is running: `npm run daemon`
-- Verify OAuth credentials in `~/.gmail-mcp/` or `~/.celebrate-oracle/`
+### Task Loading Enhancements
+- Extended task scanning to entire vault (not limited to Meetings folder)
+- Added support for daily notes and all markdown files
+- Improved "My Tasks" filtering logic
+- Added toggle button for My Tasks/All Tasks views
+- Support for comma-separated names in "My Tasks" filter
 
-### Claude API Issues
-- Verify `ANTHROPIC_API_KEY` in .env
-- Check rate limits (default: 3 retries with exponential backoff)
-- Model defaults to `claude-3-haiku-20240307`
+### Code Quality & Testing
+- Removed debug borders and unnecessary styles
+- Consolidated CSS files (dashboard.css merged into styles.css)
+- Improved DOM structure for better performance
+- Enhanced TypeScript typing throughout
+- Fixed all TypeScript compilation errors in test suite
+- Updated test mocks for GmailMcpService integration
 
-### Attachment Downloads Not Working (Google Workspace MCP)
-- **Known Limitation**: Google Workspace MCP doesn't support attachment downloads
-- **Workaround**: System processes inline email content instead
-- **Impact**: PDF/document transcripts cannot be processed
-- **Phase 2 Plan**: Direct Gmail API integration for attachments
-- **See**: `docs/attachment-handling-limitation.md` for details
+## Future Enhancements
+- [ ] Real-time email monitoring
+- [ ] Support for more meeting platforms
+- [ ] Bulk task operations
+- [ ] Task synchronization with external systems
+- [ ] Advanced analytics
+- [ ] Custom templates
+- [ ] Drag-and-drop task reordering
+- [ ] Task dependencies and subtasks
 
-### Desktop Notifications Failing
-- Linux: Install `libnotify-bin` package
-- Check `NOTIFICATION_CHANNELS` in .env
-- Slack webhook must be configured if enabled
-
-### Daemon Service Issues
-- TUI requires terminal with color support
-- Headless mode for non-interactive environments (`--headless` flag)
-- Statistics persist in `daemon-stats.db`
-- HTTP API runs on port 3002 for external control
-- Manual trigger only mode (`--manual-only` flag)
-
-## Performance Considerations
-- Processes up to 50 emails per run (configurable)
-- ~2-5 seconds per transcript for AI processing
-- Rate limiting: 250 Gmail API units/second
-- Memory usage: ~100-200MB typical
-- SQLite handles 100K+ records efficiently
-
-## Security Notes
-- OAuth tokens: `~/.gmail-mcp/` (user-only permissions)
-- API keys in `.env` (never commit)
-- No transcript content cached in logs
-- Sensitive data sanitized in error messages
-
-## TypeScript Configuration
-- Strict mode enabled with all checks
-- Target: ES2020, Module: CommonJS
-- Source maps enabled for debugging
-- Declaration files generated
-
-## Obsidian Plugin
-The repository includes a companion Obsidian plugin in `obsidian-plugin/` directory:
-
-### Plugin Features
-- Visual task dashboard with priority sections
-- Configurable meeting platforms (Google Meet, Zoom, Teams, Generic)
-- Configurable lookback hours (how far back to search)
-- HTTP communication with daemon service
-- Settings UI for API keys and configuration
-- "My Tasks" filtering with configurable user name
-
-### Plugin Setup
-```bash
-cd obsidian-plugin
-npm install
-npm run build           # Build from main-daemon-style.ts
-node build.js           # Alternative build method
-# Copy to vault: cp main.js manifest.json styles.css /path/to/vault/.obsidian/plugins/meeting-tasks/
-```
-
-**Full documentation**: See [obsidian-plugin/README.md](obsidian-plugin/README.md) and [obsidian-plugin/CLAUDE.md](obsidian-plugin/CLAUDE.md)
-- use @.agent.rules.md as the authority on how to structure and write code.
+## Debugging Tips
+- Enable console: Ctrl+Shift+I (Dev Tools)
+- Check plugin settings for API connection status
+- Review created notes for extraction quality
+- Use fallback mode to test without Claude API
+- Check localhost:3002/gmail/health for Gmail MCP status
