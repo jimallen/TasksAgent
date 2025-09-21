@@ -167,6 +167,12 @@ Meeting notes include tasks in this format:
 - Ensure Gmail API is enabled
 - Try re-authenticating
 
+**Only Getting 50 Emails**
+- Check if you have more emails with the specified label
+- Gmail returns all matching emails (pagination works for >50)
+- Try different labels or time ranges
+- Use "Reset processed emails" to reprocess existing ones
+
 **Tasks Not Extracting**
 - Check Anthropic API key
 - Verify API usage limits
@@ -176,6 +182,11 @@ Meeting notes include tasks in this format:
 - Ensure meeting notes exist
 - Check task format in notes
 - Reload Obsidian (Cmd/Ctrl + R)
+
+**Changes Not Taking Effect**
+- Reload Obsidian with Cmd/Ctrl + R
+- Disable and re-enable the plugin
+- Check console (Ctrl+Shift+I) for errors
 
 ## 🤝 Contributing
 

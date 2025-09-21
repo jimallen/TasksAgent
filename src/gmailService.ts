@@ -211,26 +211,72 @@ export class GmailService {
     }
   }
 
-  async searchEmails(query: string, maxResults: number = 100, batchSize: number = 5): Promise<GmailMessage[]> {
+  async searchEmails(query: string, maxResults: number = 100, batchSize: number = 5, sortNewestFirst: boolean = true): Promise<GmailMessage[]> {
     try {
-      console.log(`[Gmail] Searching with query: ${query}`);
+      console.log(`[Gmail] Searching with query: ${query}, max: ${maxResults}`);
 
-      const listResponse = await this.makeGmailRequest(
-        `/users/me/messages?q=${encodeURIComponent(query)}&maxResults=${maxResults}`
-      );
+      const allMessageRefs: any[] = [];
+      let pageToken: string | undefined = undefined;
+      let totalFetched = 0;
 
-      if (!listResponse.messages || listResponse.messages.length === 0) {
-        console.log('[Gmail] No messages found');
+      // Gmail API has a max of 500 per request, but often returns 50-100 per page
+      // We need to paginate to get all results up to maxResults
+      let pageNumber = 1;
+      while (totalFetched < maxResults) {
+        const pageSize = Math.min(maxResults - totalFetched, 500); // Request up to 500 per page (Gmail's max)
+
+        let url = `/users/me/messages?q=${encodeURIComponent(query)}&maxResults=${pageSize}`;
+        if (pageToken) {
+          url += `&pageToken=${pageToken}`;
+          console.log(`[Gmail] Fetching page ${pageNumber} with token: ${pageToken.substring(0, 10)}...`);
+        } else {
+          console.log(`[Gmail] Fetching page ${pageNumber} (first page), requesting ${pageSize} messages`);
+        }
+
+        const listResponse = await this.makeGmailRequest(url);
+
+        if (!listResponse.messages || listResponse.messages.length === 0) {
+          if (totalFetched === 0) {
+            console.log('[Gmail] No messages found');
+            return [];
+          }
+          console.log(`[Gmail] No more messages on page ${pageNumber}`);
+          break; // No more messages
+        }
+
+        allMessageRefs.push(...listResponse.messages);
+        totalFetched += listResponse.messages.length;
+
+        console.log(`[Gmail] Page ${pageNumber}: Got ${listResponse.messages.length} message IDs (total so far: ${totalFetched}/${maxResults})`);
+
+        // Check for next page
+        if (listResponse.nextPageToken && totalFetched < maxResults) {
+          pageToken = listResponse.nextPageToken;
+          console.log(`[Gmail] Next page token available, will fetch more...`);
+          pageNumber++;
+        } else {
+          if (!listResponse.nextPageToken) {
+            console.log(`[Gmail] No more pages available (no nextPageToken)`);
+          } else {
+            console.log(`[Gmail] Reached desired maxResults of ${maxResults}`);
+          }
+          break; // No more pages or reached maxResults
+        }
+      }
+
+      console.log(`[Gmail] Total message IDs collected: ${allMessageRefs.length}`);
+
+      if (allMessageRefs.length === 0) {
         return [];
       }
 
-      console.log(`[Gmail] Found ${listResponse.messages.length} messages, fetching in batches of ${batchSize}`);
-
-      const messages: GmailMessage[] = [];
-      const messageRefs = listResponse.messages.filter((ref: any) => ref.id);
+      // Limit to maxResults if we got more
+      const messageRefs = allMessageRefs.slice(0, maxResults).filter((ref: any) => ref.id);
       const totalBatches = Math.ceil(messageRefs.length / batchSize);
 
       console.log(`[Gmail] Starting parallel fetch: ${messageRefs.length} emails in ${totalBatches} batches`);
+
+      const messages: GmailMessage[] = [];
 
       for (let i = 0; i < messageRefs.length; i += batchSize) {
         const batch = messageRefs.slice(i, i + batchSize);
@@ -256,6 +302,16 @@ export class GmailService {
       }
 
       console.log(`[Gmail] All batches complete: ${messages.length} emails fetched successfully`);
+
+      // Sort emails by date (newest first by default)
+      if (sortNewestFirst && messages.length > 0) {
+        messages.sort((a, b) => {
+          const dateA = new Date(a.date || 0).getTime();
+          const dateB = new Date(b.date || 0).getTime();
+          return dateB - dateA; // Newest first
+        });
+        console.log(`[Gmail] Sorted ${messages.length} emails by date (newest first)`);
+      }
 
       return messages;
     } catch (error) {
@@ -367,9 +423,18 @@ export class GmailService {
       labelQuery = `(${labelList.map(l => `label:${l}`).join(' OR ')})`;
     }
 
+    // Use only 'after' for date filtering - 'newer_than' with hours doesn't work well for months
+    // Gmail will handle the date filtering properly with just 'after'
     const query = `${labelQuery} after:${dateStr}`;
 
-    return this.searchEmails(query, 100);
+    console.log(`[Gmail] Full query: "${query}"`);
+
+    // Try without label restriction to see how many total emails exist
+    const queryWithoutLabel = `after:${dateStr}`;
+    console.log(`[Gmail] Also checking total emails without label filter: "${queryWithoutLabel}"`);
+
+    // Always fetch newest emails first - increased to 500 to ensure we get everything
+    return this.searchEmails(query, 500, 5, true);
   }
 
   isAuthenticated(): boolean {

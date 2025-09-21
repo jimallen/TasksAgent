@@ -41,8 +41,10 @@ npm run clean        # Clean build artifacts
 ### Email Processing
 - OAuth 2.0 authentication with refresh tokens
 - Search by Gmail labels (default: "transcript")
-- Flexible lookback time (6h, 3d, 2w, 1M)
-- Batch processing up to 100 emails
+- Flexible lookback time (6h, 3d, 2w, 1M, 3M)
+- Batch processing up to 500 emails with pagination
+- Automatic pagination for results >50 emails
+- Newest-first sorting for relevance
 - Deduplication via frontmatter cache
 - Gmail links for direct email access
 - Attachment metadata extraction
@@ -150,9 +152,11 @@ Update `formatMeetingNote()` in `main.ts`
 
 ## Performance Optimization
 - Parallel processing: 3-5 emails concurrently
+- Gmail pagination: Handles 50-100 emails per page
+- Max emails: 500 per processing run
 - Transcript truncation: 15,000 chars max
 - Efficient caching: Frontmatter-based dedup
-- Bundle size: ~65KB minified
+- Bundle size: ~70KB minified
 - Memory usage: ~50MB typical
 
 ## Error Handling
@@ -173,6 +177,9 @@ Update `formatMeetingNote()` in `main.ts`
 - Check settings for API status
 - Review created notes for quality
 - Test without AI using fallback mode
+- Check Gmail query in console logs
+- Verify pagination with "Page 1", "Page 2" logs
+- Look for "No more pages available" message
 
 ## Release Checklist
 - [ ] Run `npm run lint`

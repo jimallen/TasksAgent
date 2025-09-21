@@ -466,6 +466,17 @@ export default class MeetingTasksPlugin extends Plugin {
       this.updateStatus(`📊 Found ${emails.length} emails`);
       new Notice(`📊 Found ${emails.length} meeting emails. Processing...`);
 
+      // Log email order to confirm newest first
+      if (emails.length > 0) {
+        console.log(`[Process] Emails sorted by date (newest first):`);
+        emails.slice(0, 5).forEach((email, idx) => {
+          console.log(`[Process]   ${idx + 1}. ${email.date} - ${email.subject?.substring(0, 50) || 'No subject'}`);
+        });
+        if (emails.length > 5) {
+          console.log(`[Process]   ... and ${emails.length - 5} more emails`);
+        }
+      }
+
       let notesCreated = 0;
       let totalTasks = 0;
       let highPriorityTasks = 0;

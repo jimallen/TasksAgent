@@ -196,12 +196,14 @@ interface TaskStructure {
 
 ## Performance Characteristics
 
-- **Email Processing**: Up to 100 emails per run
+- **Email Processing**: Up to 500 emails per run with pagination
+- **Pagination**: Automatic handling of Gmail API pages (50-100 per page)
 - **Parallel Batching**: 3-5 emails processed simultaneously
+- **Smart Sorting**: Newest emails processed first for relevance
 - **Transcript Limit**: 15,000 characters per email
 - **Cache Strategy**: Frontmatter-based deduplication
 - **Memory Usage**: ~50MB typical footprint
-- **Build Size**: ~65KB minified bundle
+- **Build Size**: ~70KB minified bundle
 
 ## Security Model
 
