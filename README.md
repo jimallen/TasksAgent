@@ -17,6 +17,7 @@
 
 ## 📚 Documentation
 
+- [Google OAuth Setup Guide](./docs/google-oauth-setup.md) - **Start here!** Step-by-step Google Cloud setup
 - [System Architecture](./docs/system-architecture.md) - Technical architecture and diagrams
 - [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md) - Development and deployment instructions
 - [CLAUDE.md](./CLAUDE.md) - AI assistant instructions for contributors
@@ -41,9 +42,8 @@ The interactive script will find your Obsidian vaults and install the plugin aut
 ### Configuration
 
 1. **Google OAuth Setup**
-   - Create a [Google Cloud Project](https://console.cloud.google.com/)
-   - Enable Gmail API
-   - Create OAuth 2.0 credentials (Desktop app type)
+   - Follow the [Google OAuth Setup Guide](./docs/google-oauth-setup.md) for detailed instructions
+   - Quick summary: Create project → Enable Gmail API → Configure OAuth → Get credentials
    - Copy Client ID and Secret to plugin settings
 
 2. **Claude AI Setup** (Optional)
