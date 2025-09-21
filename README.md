@@ -1,144 +1,180 @@
-# Obsidian Meeting Tasks Plugin (Direct Gmail API)
+# Obsidian Meeting Tasks Plugin
 
-Automatically fetch meeting transcripts from Gmail, extract actionable tasks using Claude AI, and create organized meeting notes in Obsidian - all without requiring a separate daemon process.
+> Automatically extract actionable tasks from Gmail meeting transcripts using Claude AI and create organized meeting notes in Obsidian.
 
-## Features
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Obsidian](https://img.shields.io/badge/Obsidian-v0.15.0+-purple)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-- **Direct Gmail Integration**: Connect directly to Gmail API without external services
-- **OAuth 2.0 Authentication**: Secure authentication with your Google account
-- **AI Task Extraction**: Uses Claude AI to intelligently extract tasks from meeting transcripts
-- **Task Dashboard**: Visual dashboard with priority-based task organization
-- **No Daemon Required**: Everything runs within Obsidian - no separate processes
+## 🌟 Features
 
-## Setup Guide
+- **📧 Direct Gmail Integration** - OAuth 2.0 authentication without external services
+- **🤖 AI Task Extraction** - Claude AI intelligently extracts tasks, decisions, and action items
+- **📊 Visual Task Dashboard** - Interactive dashboard with priority-based organization
+- **🏗️ Standalone Architecture** - Everything runs within Obsidian, no daemon required
+- **📁 Smart Organization** - Automatic year/month folder structure for meeting notes
+- **🔄 Real-time Processing** - Process emails on-demand with keyboard shortcuts
 
-### 1. Install the Plugin
+## 📚 Documentation
 
-1. Download the plugin files (`main.js`, `manifest.json`, `styles.css`)
-2. Place them in your vault's `.obsidian/plugins/meeting-tasks/` folder
-3. Enable the plugin in Obsidian settings
+- [System Architecture](./docs/system-architecture.md) - Technical architecture and diagrams
+- [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md) - Development and deployment instructions
+- [CLAUDE.md](./CLAUDE.md) - AI assistant instructions for contributors
 
-### 2. Configure Google OAuth
+## 🚀 Quick Start
 
-You'll need to create your own Google Cloud project to use Gmail API:
+### Installation
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable Gmail API:
-   - Go to "APIs & Services" > "Library"
-   - Search for "Gmail API"
-   - Click "Enable"
-4. Create OAuth 2.0 credentials:
-   - Go to "APIs & Services" > "Credentials"
-   - Click "Create Credentials" > "OAuth client ID"
-   - Choose "Desktop app" as application type
-   - Download the credentials JSON
-5. Copy the Client ID and Client Secret to plugin settings
+#### Option 1: Interactive Deployment (Recommended)
+```bash
+npm install
+npm run deploy
+```
+The interactive script will find your Obsidian vaults and install the plugin automatically.
 
-### 3. Configure Plugin Settings
+#### Option 2: Manual Installation
+1. Download `main.js`, `manifest.json`, and `styles.css`
+2. Create folder: `<vault>/.obsidian/plugins/meeting-tasks/`
+3. Copy the files to that folder
+4. Enable plugin in Obsidian settings
 
-Open plugin settings in Obsidian:
+### Configuration
 
-1. **Google OAuth Settings**:
-   - Paste your Client ID
-   - Paste your Client Secret
-   - Click "Authenticate" to connect to Gmail
+1. **Google OAuth Setup**
+   - Create a [Google Cloud Project](https://console.cloud.google.com/)
+   - Enable Gmail API
+   - Create OAuth 2.0 credentials (Desktop app type)
+   - Copy Client ID and Secret to plugin settings
 
-2. **Claude AI Settings** (optional):
-   - Add your Anthropic API key for AI task extraction
-   - Choose preferred Claude model
+2. **Claude AI Setup** (Optional)
+   - Get API key from [Anthropic](https://console.anthropic.com/)
+   - Add to plugin settings
+   - Choose model (Haiku, Sonnet, or Opus)
 
-3. **Email Processing**:
-   - Set lookback hours (how far back to search)
-   - Configure Gmail labels to filter (default: "transcript")
-
-4. **Organization**:
+3. **Plugin Settings**
+   - Set lookback time (e.g., "3d" for 3 days)
+   - Configure Gmail labels (default: "transcript")
    - Set notes folder location
-   - Configure dashboard preferences
 
-## Usage
+## 💡 Usage
 
-### Processing Emails
-
-- **Command Palette**: `Cmd/Ctrl + P` → "📧 Process meeting emails now"
+### Process Emails
+- **Command Palette**: `Cmd/Ctrl + P` → "📧 Process meeting emails"
 - **Keyboard Shortcut**: `Cmd/Ctrl + Shift + M`
-- **Ribbon Icon**: Click the mail icon in the left sidebar
-- **Settings**: Use "Process" button in plugin settings
+- **Ribbon Icon**: Click the mail icon
 
 ### Task Dashboard
+- View all tasks from meeting notes
+- Filter by priority, date, or assignee
+- Toggle "My Tasks" view
+- Click to complete tasks
+- Edit task details inline
 
-- **Open Dashboard**: Click dashboard icon or use command palette
-- **Filter Tasks**: Use priority, date, and assignee filters
-- **My Tasks View**: Toggle to show only tasks assigned to you
-- **Edit Tasks**: Click edit button on any task to modify
+## 🏗️ Architecture Overview
 
-## Authentication Flow
+```mermaid
+graph LR
+    A[Obsidian Plugin] --> B[Gmail API]
+    A --> C[Claude AI]
+    A --> D[Local Storage]
+    B --> E[OAuth 2.0]
+    C --> F[Task Extraction]
+    D --> G[Meeting Notes]
+```
 
-1. Click "Authenticate" in settings
-2. Browser opens Google authorization page
-3. Sign in and grant permissions
-4. Copy the authorization code
-5. Paste code in Obsidian modal
-6. Plugin saves refresh token for future use
+The plugin operates as a standalone solution within Obsidian, directly communicating with Gmail and Claude APIs. See [System Architecture](./docs/system-architecture.md) for detailed diagrams.
 
-## Features
+## 🔧 Development
 
-### Direct Gmail API
-- No external services or daemons needed
-- OAuth 2.0 with refresh token support
-- Automatic token refresh when expired
-- Rate limiting and error handling
+### Prerequisites
+- Node.js 16+
+- npm 7+
+- Obsidian for testing
 
-### Task Extraction
-- Powered by Claude AI (3.5 Haiku, Sonnet 4, or Opus 4.1)
-- Extracts tasks with assignees and priorities
-- Identifies key decisions and next steps
-- Confidence scoring for extracted information
+### Setup
+```bash
+# Install dependencies
+npm install
 
-### Meeting Notes
-- Organized by date and subject
-- Includes participants, decisions, and action items
-- Tasks formatted with Obsidian checkbox syntax
-- Supports custom metadata and tags
+# Development build
+npm run dev
 
-## Troubleshooting
+# Production build
+npm run build
 
-### Gmail Not Connecting
-- Ensure OAuth credentials are correct
-- Check that Gmail API is enabled in Google Cloud Console
-- Try re-authenticating if token expired
+# Type checking
+npm run lint
 
-### Tasks Not Extracting
-- Verify Anthropic API key is set
-- Check Claude API usage limits
-- Meeting notes will still be created without AI extraction
+# Deploy to vault
+npm run deploy
+```
 
-### Authentication Issues
-- Make sure redirect URI is set to `urn:ietf:wg:oauth:2.0:oob`
-- Clear authentication and re-authenticate if needed
-- Check Google Cloud Console for any API restrictions
+### Project Structure
+```
+├── src/               # TypeScript source files
+│   ├── main.ts       # Plugin entry point
+│   ├── gmailService.ts    # Gmail API integration
+│   ├── claudeExtractor.ts # AI task extraction
+│   ├── taskDashboard.ts   # Dashboard UI
+│   └── oauthServer.ts     # OAuth handler
+├── docs/             # Documentation
+├── dist/            # Build output
+└── deploy.sh        # Deployment script
+```
 
-## Privacy & Security
+## 📋 Task Format
 
-- OAuth tokens stored locally in Obsidian vault settings
-- No data sent to external servers except Gmail and Claude APIs
-- All processing happens locally within Obsidian
-- Credentials never leave your device
+Meeting notes include tasks in this format:
+```markdown
+### 🔴 High Priority
+- [ ] Task description [[@Assignee]] 📅 2024-12-29 ⚠️ 85% #category
+  - Context: Additional information
+  > "Quote from meeting"
+```
 
-## Requirements
+## 🔒 Security & Privacy
 
-- Obsidian v0.15.0 or higher
-- Google account with Gmail access
-- Google Cloud project with Gmail API enabled
-- (Optional) Anthropic API key for AI features
+- **Local Storage**: OAuth tokens and settings stored locally
+- **No External Servers**: Direct API communication only
+- **Data Privacy**: No data persistence outside your vault
+- **Secure Authentication**: OAuth 2.0 with refresh tokens
 
-## Support
+## 🐛 Troubleshooting
 
-For issues or questions:
-- Check the troubleshooting section above
-- Review Google Cloud Console for API errors
-- Ensure all credentials are properly configured
+### Common Issues
 
-## License
+**Gmail Authentication Failed**
+- Verify OAuth credentials in settings
+- Ensure Gmail API is enabled
+- Try re-authenticating
 
-MIT
+**Tasks Not Extracting**
+- Check Anthropic API key
+- Verify API usage limits
+- Notes will be created without AI extraction
+
+**Dashboard Not Loading**
+- Ensure meeting notes exist
+- Check task format in notes
+- Reload Obsidian (Cmd/Ctrl + R)
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read [CLAUDE.md](./CLAUDE.md) for AI-assisted development guidelines.
+
+## 📄 License
+
+MIT License - see [LICENSE](./LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Obsidian team for the plugin API
+- Google for Gmail API
+- Anthropic for Claude AI
+- Community contributors
+
+---
+
+<div align="center">
+Made with ❤️ for the Obsidian community
+</div>
