@@ -11,13 +11,19 @@ export interface ExtractedTask {
   rawText?: string;
 }
 
+export interface NextStep {
+  description: string;
+  assignee: string;
+  priority: 'high' | 'medium' | 'low';
+}
+
 export interface TaskExtractionResult {
   tasks: ExtractedTask[];
   summary: string;
   participants: string[];
   meetingDate: Date;
   keyDecisions: string[];
-  nextSteps: string[];
+  nextSteps: NextStep[];
   confidence: number;
 }
 
@@ -84,12 +90,18 @@ Extract the following information and return as JSON:
 
 5. **keyDecisions** - Array of important decisions made
 
-6. **nextSteps** - Array of general next steps beyond specific tasks
+6. **nextSteps** - Array of next step objects with:
+   - description: Clear description of the next step
+   - assignee: Person responsible (match with participants when possible, default "Unassigned")
+   - priority: "high", "medium", or "low" based on importance
 
 Guidelines:
 - Focus on explicit commitments ("I will", "I'll", "Let me", "I can", "[Name] will")
 - Include tasks with deadlines or time constraints
 - Capture follow-ups and action items
+- Look for "Next steps", "Action items", "To do", "Follow up" sections
+- Check for Google Meet's AI-suggested action items or next steps (often at the end)
+- Include any items listed under "Suggested next steps" or "Recommended actions"
 - Ignore general discussions or past work
 - Be conservative - only extract clear tasks
 - Only use names that actually appear in the transcript
@@ -152,19 +164,23 @@ Return ONLY valid JSON, no other text:`;
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
-      
+
       // Normalize and validate
       const tasks = this.normalizeTasks(parsed.tasks || []);
       const participants = parsed.participants || [];
-      
+      const nextSteps = this.normalizeNextSteps(parsed.nextSteps || [], participants);
+
+      // Deduplicate between tasks and next steps
+      const { deduplicatedTasks, deduplicatedNextSteps } = this.deduplicateTasksAndNextSteps(tasks, nextSteps);
+
       return {
-        tasks: this.deduplicateTasks(tasks),
+        tasks: deduplicatedTasks,
         summary: parsed.summary || 'Meeting transcript processed',
         participants,
         meetingDate: this.parseDate(parsed.meetingDate) || new Date(),
         keyDecisions: parsed.keyDecisions || [],
-        nextSteps: parsed.nextSteps || [],
-        confidence: this.calculateOverallConfidence(tasks)
+        nextSteps: deduplicatedNextSteps,
+        confidence: this.calculateOverallConfidence(deduplicatedTasks)
       };
     } catch (error) {
       console.error('Failed to parse Claude response', error);
@@ -238,6 +254,98 @@ Return ONLY valid JSON, no other text:`;
       seen.add(key);
       return true;
     });
+  }
+
+  /**
+   * Normalize next steps and assign owners based on participants
+   */
+  private normalizeNextSteps(nextSteps: any[], participants: string[]): NextStep[] {
+    if (!Array.isArray(nextSteps)) return [];
+
+    return nextSteps.map(step => {
+      // Handle both string and object formats
+      if (typeof step === 'string') {
+        // Try to extract assignee from the text
+        const assignee = this.extractAssigneeFromText(step, participants);
+        return {
+          description: this.cleanDescription(step),
+          assignee: assignee || 'Unassigned',
+          priority: 'medium' as const
+        };
+      } else if (typeof step === 'object' && step !== null) {
+        return {
+          description: this.cleanDescription(step.description || String(step)),
+          assignee: step.assignee || 'Unassigned',
+          priority: this.normalizePriority(step.priority || 'medium')
+        };
+      }
+      return null;
+    }).filter((step): step is NextStep => step !== null && step.description.length > 5);
+  }
+
+  /**
+   * Extract assignee from text based on participants list
+   */
+  private extractAssigneeFromText(text: string, participants: string[]): string | null {
+    // Check if any participant name appears in the text
+    for (const participant of participants) {
+      if (text.toLowerCase().includes(participant.toLowerCase())) {
+        return participant;
+      }
+    }
+
+    // Look for patterns like "John will..." or "Sarah to..."
+    const patterns = [
+      /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:will|to|should|needs to)/,
+      /(?:assigned to|owner:|assignee:)\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Deduplicate between tasks and next steps
+   */
+  private deduplicateTasksAndNextSteps(
+    tasks: ExtractedTask[],
+    nextSteps: NextStep[]
+  ): { deduplicatedTasks: ExtractedTask[], deduplicatedNextSteps: NextStep[] } {
+    // Create a set of task descriptions for comparison
+    const taskDescriptions = new Set(
+      tasks.map(t => t.description.toLowerCase().replace(/[^\w\s]/g, ''))
+    );
+
+    // Filter out next steps that are already in tasks
+    const deduplicatedNextSteps = nextSteps.filter(step => {
+      const normalizedStep = step.description.toLowerCase().replace(/[^\w\s]/g, '');
+
+      // Check if this next step is too similar to any existing task
+      for (const taskDesc of taskDescriptions) {
+        // Calculate similarity (simple approach - could be enhanced)
+        const stepWords = normalizedStep.split(/\s+/);
+        const taskWords = taskDesc.split(/\s+/);
+        const commonWords = stepWords.filter(w => taskWords.includes(w));
+
+        // If more than 60% of words match, consider it a duplicate
+        if (commonWords.length > stepWords.length * 0.6 && stepWords.length > 2) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    return {
+      deduplicatedTasks: tasks,
+      deduplicatedNextSteps
+    };
   }
 
   /**

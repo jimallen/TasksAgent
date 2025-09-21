@@ -2,7 +2,7 @@
 
 > Automatically extract actionable tasks from Gmail meeting transcripts using Claude AI and create organized meeting notes in Obsidian.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![Obsidian](https://img.shields.io/badge/Obsidian-v0.15.0+-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -14,6 +14,11 @@
 - **🏗️ Standalone Architecture** - Everything runs within Obsidian, no daemon required
 - **📁 Smart Organization** - Automatic year/month folder structure for meeting notes
 - **🔄 Real-time Processing** - Process emails on-demand with keyboard shortcuts
+- **🔗 Gmail Links** - Direct links to view emails in Gmail
+- **📎 Attachment Tracking** - View attachment names and sizes in notes
+- **♻️ Email Reprocessing** - One-click reprocessing with latest extraction logic
+- **👥 Smart Assignees** - Automatically assigns tasks to meeting participants
+- **📋 Next Steps** - Captures Google Meet AI suggestions and action items
 
 ## 📚 Documentation
 
@@ -62,6 +67,7 @@ The interactive script will find your Obsidian vaults and install the plugin aut
 - **Command Palette**: `Cmd/Ctrl + P` → "📧 Process meeting emails"
 - **Keyboard Shortcut**: `Cmd/Ctrl + Shift + M`
 - **Ribbon Icon**: Click the mail icon
+- **Reprocess**: Click "🔄 Reprocess this email" link at bottom of any meeting note
 
 ### Task Dashboard
 - View all tasks from meeting notes
@@ -130,7 +136,20 @@ Meeting notes include tasks in this format:
 - [ ] Task description [[@Assignee]] 📅 2024-12-29 ⚠️ 85% #category
   - Context: Additional information
   > "Quote from meeting"
+
+## Next Steps
+### 🟡 Medium Priority
+- [ ] Follow-up action [[@Owner]]
 ```
+
+## ✨ What's New in v2.0
+
+- **Enhanced Task Extraction**: Better recognition of Google Meet AI suggestions
+- **Smart Next Steps**: Automatically assigns owners based on participants
+- **Email Reprocessing**: Update existing notes with improved extraction
+- **Attachment Support**: Shows attachment metadata in meeting notes
+- **Gmail Integration**: Direct links to view emails in Gmail
+- **Deduplication**: Prevents duplicate tasks and next steps
 
 ## 🔒 Security & Privacy
 

@@ -3,6 +3,8 @@
 ## Project Overview
 **Standalone Obsidian plugin** that fetches meeting emails from Gmail via OAuth, extracts tasks using Claude AI, and creates organized meeting notes with a visual task dashboard.
 
+**Version 2.0** includes enhanced task extraction, email reprocessing, attachment support, and smart next steps assignment.
+
 ## Architecture
 - **Standalone Plugin**: No external services or daemons required
 - **Direct Integration**: Gmail OAuth 2.0 and Claude AI API
@@ -42,10 +44,16 @@ npm run clean        # Clean build artifacts
 - Flexible lookback time (6h, 3d, 2w, 1M)
 - Batch processing up to 100 emails
 - Deduplication via frontmatter cache
+- Gmail links for direct email access
+- Attachment metadata extraction
 
 ### Task Extraction
 - Claude models: Haiku, Sonnet 4, Opus 4.1
 - Extracts: tasks, assignees, priorities, dates
+- Captures Google Meet AI suggestions
+- Smart assignee matching from participants
+- Next steps with owner assignment
+- Task/Next step deduplication
 - Confidence scoring for accuracy
 - Fallback mode without AI
 
@@ -71,6 +79,30 @@ Meetings/
 - [ ] Task description [[@Assignee]] 📅 2024-12-29 ⚠️ 85% #tag
   - Context: Additional information
   > "Quote from transcript"
+```
+
+## Meeting Note Format
+```markdown
+---
+title: Meeting Title
+emailId: 19960e976514fa1d
+gmailUrl: https://mail.google.com/mail/u/0/#inbox/19960e976514fa1d
+---
+
+# Meeting Title
+**Email:** [View in Gmail](link)
+**Attachments:** file.pdf (125KB), presentation.pptx (2.3MB)
+
+## Action Items
+### 🔴 High Priority
+- [ ] Task [[@Owner]]
+
+## Next Steps
+### 🟡 Medium Priority
+- [ ] Follow-up action [[@Assignee]]
+
+---
+**[🔄 Reprocess this email](obsidian://meeting-tasks-reprocess?id=emailId)**
 ```
 
 ## Configuration Options
@@ -151,12 +183,14 @@ Update `formatMeetingNote()` in `main.ts`
 - [ ] Create git tag
 - [ ] Update documentation
 
-## Recent Updates
-- Converted to standalone plugin (no daemon)
-- Added interactive deployment script
-- Cleaned up all unnecessary dependencies
-- Improved documentation structure
-- Enhanced build process
+## Recent Updates (v2.0)
+- Enhanced task extraction with Google Meet AI support
+- Added email reprocessing capability
+- Implemented smart assignee matching
+- Added Gmail links and attachment metadata
+- Improved next steps handling with deduplication
+- Added protocol handlers for actions
+- Updated note format with reprocess links
 
 ## Future Enhancements
 - Real-time email monitoring

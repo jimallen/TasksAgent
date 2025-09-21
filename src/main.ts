@@ -266,6 +266,13 @@ export default class MeetingTasksPlugin extends Plugin {
       })
     );
 
+    // Register protocol handler for reprocessing emails
+    this.registerObsidianProtocolHandler('meeting-tasks-reprocess', async (params) => {
+      if (params.id) {
+        await this.reprocessEmailById(params.id, true);
+      }
+    });
+
     // Register protocol handler for OAuth callback
     this.registerObsidianProtocolHandler('meeting-tasks-oauth', async (params) => {
       if (params.code) {
@@ -677,14 +684,17 @@ export default class MeetingTasksPlugin extends Plugin {
       const fileName = `${date} - ${subject}.md`;
       const filePath = normalizePath(`${folderPath}/${fileName}`);
 
-      if (this.app.vault.getAbstractFileByPath(filePath)) {
-        console.log('Note already exists:', filePath);
-        return false;
-      }
-
+      // Check if file already exists and handle it
+      const existingFile = this.app.vault.getAbstractFileByPath(filePath);
       let noteContent = this.formatMeetingNote(email, extraction);
-      await this.app.vault.create(filePath, noteContent);
-      console.log('Created note:', filePath);
+
+      if (existingFile instanceof TFile) {
+        console.log('Note already exists, replacing:', filePath);
+        await this.app.vault.modify(existingFile, noteContent);
+      } else {
+        await this.app.vault.create(filePath, noteContent);
+        console.log('Created note:', filePath);
+      }
 
       // Add to cache and persist to settings
       this.emailIdCache.add(email.id);
@@ -707,6 +717,7 @@ date: ${date}
 type: meeting
 source: Gmail
 emailId: ${email.id}
+gmailUrl: ${email.gmailUrl || ''}
 participants: [${extraction.participants.map(p => `"${p}"`).join(', ')}]
 confidence: ${extraction.confidence}
 tags: [meeting, ${extraction.tasks.length > 0 ? 'has-tasks' : 'no-tasks'}]
@@ -721,6 +732,18 @@ created: ${new Date().toISOString()}
 
     if (extraction.participants.length > 0) {
       content += `**Participants:** ${extraction.participants.map(p => `[[${p}]]`).join(', ')}\n`;
+    }
+
+    if (email.gmailUrl) {
+      content += `**Email:** [View in Gmail](${email.gmailUrl})\n`;
+    }
+
+    if (email.attachments && email.attachments.length > 0) {
+      content += `**Attachments:** `;
+      content += email.attachments.map((att: any) =>
+        `${att.filename} (${(att.size / 1024).toFixed(1)}KB)`
+      ).join(', ');
+      content += '\n';
     }
 
     content += `**Confidence:** ${extraction.confidence}%\n\n`;
@@ -771,17 +794,44 @@ created: ${new Date().toISOString()}
 
     if (extraction.nextSteps.length > 0) {
       content += `## Next Steps\n`;
-      for (const step of extraction.nextSteps) {
-        content += `- ${step}\n`;
+
+      // Group next steps by priority
+      const highPrioritySteps = extraction.nextSteps.filter(s => s.priority === 'high');
+      const mediumPrioritySteps = extraction.nextSteps.filter(s => s.priority === 'medium');
+      const lowPrioritySteps = extraction.nextSteps.filter(s => s.priority === 'low');
+
+      if (highPrioritySteps.length > 0) {
+        content += `### 🔴 High Priority\n`;
+        for (const step of highPrioritySteps) {
+          content += `- [ ] ${step.description} [[@${step.assignee}]]\n`;
+        }
+        content += '\n';
       }
-      content += '\n';
+
+      if (mediumPrioritySteps.length > 0) {
+        content += `### 🟡 Medium Priority\n`;
+        for (const step of mediumPrioritySteps) {
+          content += `- [ ] ${step.description} [[@${step.assignee}]]\n`;
+        }
+        content += '\n';
+      }
+
+      if (lowPrioritySteps.length > 0) {
+        content += `### 🟢 Low Priority\n`;
+        for (const step of lowPrioritySteps) {
+          content += `- [ ] ${step.description} [[@${step.assignee}]]\n`;
+        }
+        content += '\n';
+      }
     }
 
     if (email.body) {
       content += `## Original Email\n\`\`\`\n${email.body.substring(0, 1000)}${email.body.length > 1000 ? '...' : ''}\n\`\`\`\n`;
     }
 
-    content += `\n---\n*Imported from Gmail on ${new Date().toLocaleString()}*`;
+    content += `\n---\n`;
+    content += `*Imported from Gmail on ${new Date().toLocaleString()}*\n\n`;
+    content += `**[🔄 Reprocess this email](obsidian://meeting-tasks-reprocess?id=${email.id})**`;
 
     return content;
   }
@@ -850,7 +900,7 @@ created: ${new Date().toISOString()}
     await this.saveData(this.settings);
   }
 
-  async reprocessEmailById(emailId: string) {
+  async reprocessEmailById(emailId: string, replaceExisting: boolean = true) {
     try {
       console.log(`[reprocessEmailById] Reprocessing email: ${emailId}`);
 
@@ -878,19 +928,68 @@ created: ${new Date().toISOString()}
         return;
       }
 
+      // Find existing note with this email ID if we need to replace it
+      let existingFile: TFile | null = null;
+      if (replaceExisting) {
+        const files = this.app.vault.getMarkdownFiles();
+        for (const file of files) {
+          if (!file.path.startsWith(this.settings.notesFolder)) continue;
+
+          try {
+            const content = await this.app.vault.read(file);
+            const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+            if (frontmatterMatch) {
+              const emailIdMatch = frontmatterMatch[1].match(/emailId:\s*(.+)/);
+              if (emailIdMatch && emailIdMatch[1].trim() === emailId) {
+                existingFile = file;
+                console.log(`[Reprocess] Found existing note at: ${file.path}`);
+                break;
+              }
+            }
+          } catch (error) {
+            console.error(`Error reading file ${file.path}:`, error);
+          }
+        }
+      }
+
       // Remove from processed list to allow reprocessing
       this.emailIdCache.delete(emailId);
 
-      // Process the email
+      // Process the email with latest extraction logic
       const result = await this.processTranscriptEmail(email);
 
       if (result.success) {
+        // If we found an existing file and successfully reprocessed, delete the old one
+        // The new one was created by processTranscriptEmail
+        if (existingFile && result.obsidianPath) {
+          // The new file path from processTranscriptEmail
+          const newFilePath = result.obsidianPath;
+
+          // Only delete if they're different files
+          if (existingFile.path !== newFilePath) {
+            console.log(`[Reprocess] Deleting old note: ${existingFile.path}`);
+            await this.app.vault.delete(existingFile);
+            new Notice(`✅ Replaced old note with updated version`);
+          } else {
+            // Same file path, so it was already overwritten
+            console.log(`[Reprocess] Note updated in place: ${existingFile.path}`);
+          }
+        }
+
         this.emailIdCache.add(emailId);
         this.settings.processedEmails = Array.from(this.emailIdCache);
         await this.saveSettings();
 
         new Notice(`✅ Reprocessed email with ${result.taskCount || 0} tasks (Confidence: ${result.confidence}%)`);
         this.updateStatus(`✅ Reprocessed with ${result.taskCount || 0} tasks`);
+
+        // Open the newly created/updated note
+        if (result.obsidianPath) {
+          const file = this.app.vault.getAbstractFileByPath(result.obsidianPath);
+          if (file instanceof TFile) {
+            await this.app.workspace.getLeaf(false).openFile(file);
+          }
+        }
       } else {
         new Notice('❌ Failed to reprocess email');
         this.updateStatus('❌ Reprocessing failed');

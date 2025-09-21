@@ -71,6 +71,8 @@ graph TB
   - OAuth 2.0 authentication flow
   - Token refresh management
   - Email search and retrieval
+  - Attachment metadata extraction
+  - Gmail URL generation for direct email access
   - Batch processing support
   - Rate limiting protection
 
@@ -79,7 +81,10 @@ graph TB
 - **Capabilities**:
   - Meeting transcript analysis
   - Task identification and prioritization
-  - Assignee detection
+  - Assignee detection from participants
+  - Next steps extraction with owner assignment
+  - Google Meet AI suggestions capture
+  - Task/Next step deduplication
   - Confidence scoring
   - Fallback extraction mode
 
@@ -91,6 +96,7 @@ graph TB
   - Advanced filtering options
   - Real-time statistics
   - My Tasks/All Tasks toggle
+  - Next steps visualization with assignees
 
 #### 5. OAuth Server (oauthServer.ts)
 - **Purpose**: Local OAuth callback handler
@@ -240,6 +246,24 @@ graph LR
     style H fill:#6f9,stroke:#333,stroke-width:2px
 ```
 
+## Recent Enhancements (v2.0)
+
+### Enhanced Email Processing
+- **Gmail Links**: Direct links to view emails in Gmail web interface
+- **Attachment Handling**: Full attachment metadata with file sizes
+- **Email Reprocessing**: One-click reprocessing with latest extraction logic
+
+### Improved Task Extraction
+- **Next Steps Recognition**: Captures Google Meet AI suggestions
+- **Smart Assignee Matching**: Assigns tasks based on meeting participants
+- **Deduplication Logic**: Prevents duplicate tasks and next steps
+- **Priority-based Organization**: Tasks and next steps grouped by priority
+
+### Meeting Note Features
+- **Reprocess Link**: Every note includes a reprocess action
+- **Protocol Handlers**: Custom `obsidian://` URLs for actions
+- **Live Note Updates**: Replace existing notes when reprocessing
+
 ## Error Handling Strategy
 
 1. **OAuth Errors**: Token refresh with exponential backoff
@@ -247,6 +271,7 @@ graph LR
 3. **Network Failures**: Graceful degradation with user notifications
 4. **Parsing Errors**: Fallback extraction mode
 5. **Cache Conflicts**: Automatic resolution with deduplication
+6. **Reprocessing Safety**: Preserves file paths and handles conflicts
 
 ## Future Architecture Considerations
 

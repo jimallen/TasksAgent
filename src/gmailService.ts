@@ -10,13 +10,23 @@ interface GmailToken {
 
 interface GmailMessage {
   id: string;
+  threadId?: string;
   subject: string;
   from: string;
   to: string;
   date: string;
   body: string;
   snippet: string;
-  attachments?: any[];
+  attachments?: GmailAttachment[];
+  gmailUrl?: string;
+}
+
+interface GmailAttachment {
+  filename: string;
+  mimeType: string;
+  size: number;
+  attachmentId: string;
+  downloadUrl?: string;
 }
 
 interface GmailCredentials {
@@ -270,7 +280,7 @@ export class GmailService {
 
       const body = this.extractBody(message.payload);
 
-      const attachments: any[] = [];
+      const attachments: GmailAttachment[] = [];
       if (message.payload?.parts) {
         for (const part of message.payload.parts) {
           if (part.filename && part.body?.attachmentId) {
@@ -278,21 +288,27 @@ export class GmailService {
               filename: part.filename,
               mimeType: part.mimeType,
               size: part.body.size,
-              attachmentId: part.body.attachmentId
+              attachmentId: part.body.attachmentId,
+              downloadUrl: `https://mail.google.com/mail/u/0/?ui=2&ik=${messageId}&attid=${part.body.attachmentId}&disp=safe&zw`
             });
           }
         }
       }
 
+      // Generate Gmail URL for the email
+      const gmailUrl = `https://mail.google.com/mail/u/0/#inbox/${messageId}`;
+
       return {
         id: messageId,
+        threadId: message.threadId,
         subject: getHeader('subject'),
         from: getHeader('from'),
         to: getHeader('to'),
         date: getHeader('date'),
         body,
         snippet: message.snippet || '',
-        attachments
+        attachments,
+        gmailUrl
       };
     } catch (error) {
       console.error(`Failed to get email ${messageId}:`, error);

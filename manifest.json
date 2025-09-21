@@ -1,9 +1,9 @@
 {
   "id": "obsidian-meeting-tasks",
   "name": "Meeting Tasks",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "minAppVersion": "1.0.0",
-  "description": "Automatically import meeting tasks and notes from TasksAgent service into your Obsidian vault",
+  "description": "Extract tasks from Gmail meeting transcripts using AI, with reprocessing, attachments, and smart assignee matching",
   "author": "TasksAgent Team",
   "authorUrl": "https://github.com/jimallen/obsidian-meeting-tasks",
   "fundingUrl": "",
