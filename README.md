@@ -9,10 +9,6 @@ Automatically fetch meeting transcripts from Gmail, extract actionable tasks usi
 - **AI Task Extraction**: Uses Claude AI to intelligently extract tasks from meeting transcripts
 - **Task Dashboard**: Visual dashboard with priority-based task organization
 - **No Daemon Required**: Everything runs within Obsidian - no separate processes
-- **Smart Duplicate Prevention**: Tracks processed emails using frontmatter to avoid reprocessing
-- **Parallel Processing**: Processes up to 100 emails in parallel batches for 3x faster performance
-- **Auto-Organization**: Meeting notes automatically organized in year/month folder structure
-- **Flexible Time Formats**: Lookback time supports hours (6h), days (3d), weeks (2w), or months (1M)
 
 ## Setup Guide
 
@@ -53,9 +49,8 @@ Open plugin settings in Obsidian:
    - Choose preferred Claude model
 
 3. **Email Processing**:
-   - Set lookback time (e.g., "3d" for 3 days, "1M" for 1 month)
+   - Set lookback hours (how far back to search)
    - Configure Gmail labels to filter (default: "transcript")
-   - Processes up to 100 emails per run
 
 4. **Organization**:
    - Set notes folder location
@@ -101,12 +96,10 @@ Open plugin settings in Obsidian:
 - Confidence scoring for extracted information
 
 ### Meeting Notes
-- Automatically organized in Meetings/year/month/ folder structure
+- Organized by date and subject
 - Includes participants, decisions, and action items
 - Tasks formatted with Obsidian checkbox syntax
 - Supports custom metadata and tags
-- Each note includes unique emailId for duplicate prevention
-- Cache syncs automatically when notes are moved or deleted
 
 ## Troubleshooting
 
@@ -119,7 +112,6 @@ Open plugin settings in Obsidian:
 - Verify Anthropic API key is set
 - Check Claude API usage limits
 - Meeting notes will still be created without AI extraction
-- Supports Claude 3.5 Haiku, Sonnet 4, and Opus 4.1 models
 
 ### Authentication Issues
 - Make sure redirect URI is set to `urn:ietf:wg:oauth:2.0:oob`
@@ -132,7 +124,6 @@ Open plugin settings in Obsidian:
 - No data sent to external servers except Gmail and Claude APIs
 - All processing happens locally within Obsidian
 - Credentials never leave your device
-- Processed email IDs cached to prevent duplicate processing
 
 ## Requirements
 
@@ -140,23 +131,6 @@ Open plugin settings in Obsidian:
 - Google account with Gmail access
 - Google Cloud project with Gmail API enabled
 - (Optional) Anthropic API key for AI features
-
-## Recent Updates (v1.1.0)
-
-### Performance Improvements
-- **3x Faster Processing**: Parallel email fetching in batches
-- **100 Email Limit**: Increased from 50 to 100 emails per run
-- **Smart Caching**: Frontmatter-based duplicate prevention
-
-### Enhanced File Management
-- **Auto Sync**: Cache updates when files are moved in/out of Meetings folder
-- **Delete Handling**: Automatic cache cleanup when meeting notes are deleted
-- **Graceful Errors**: Proper handling of notes without emailId field
-
-### Better Organization
-- **Year/Month Folders**: Meeting notes organized as `Meetings/2025/01/...`
-- **Flexible Time Formats**: Support for `6h`, `3d`, `2w`, `1M` notation
-- **Improved Notifications**: Optional detailed processing notifications
 
 ## Support
 

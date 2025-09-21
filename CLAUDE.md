@@ -17,10 +17,7 @@
 
 ## 📐 Documentation
 
-- **[Quick Start Guide](./QUICK_START.md)** - Get started in 5 minutes
 - **[Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md)** - Comprehensive build instructions
-- **[System Architecture](./docs/system-architecture.md)** - Technical architecture and diagrams
-- **[HTTP Server Architecture](../docs/ARCHITECTURE_HTTP_SERVERS.md)** - Parent project architecture
 
 ## Quick Start
 
@@ -118,7 +115,6 @@ cp main.js manifest.json styles.css "/path/to/vault/.obsidian/plugins/meeting-ta
 {
   // Email Processing
   lookbackTime: "1M",               // Flexible time format: 6h, 3d, 2w, 1M (default: 1 month)
-  daemonUrl: "http://localhost:3002",  // Daemon service endpoint (no longer used)
   gmailLabels: "transcript",       // Gmail label to filter (default: 'transcript')
 
   // Claude AI
@@ -296,11 +292,6 @@ node build.js
 - **Improved Feedback**: Better progress notifications with email counts and pluralization
 - **Status Updates**: Real-time status bar updates during processing
 
-### API Key Integration (2025-08-30)
-- **Plugin Settings**: API key now stored in plugin configuration
-- **Daemon Communication**: Key passed via HTTP `/trigger` endpoint
-- **No .env Required**: Daemon receives key dynamically from plugin
-- **Result**: Full Claude AI extraction without fallback mode
 
 ### Filter Button Count Badges (2025-08-29)
 - Added real-time count badges to all filter buttons
@@ -354,4 +345,3 @@ node build.js
 - Check plugin settings for API connection status
 - Review created notes for extraction quality
 - Use fallback mode to test without Claude API
-- Check localhost:3002/gmail/health for Gmail MCP status
