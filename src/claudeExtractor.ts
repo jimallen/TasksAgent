@@ -409,4 +409,83 @@ Return ONLY valid JSON, no other text:`;
       confidence: 30
     };
   }
+
+  /**
+   * Extract action items from non-meeting emails
+   * Uses a different prompt focused on identifying tasks in regular emails
+   */
+  async extractActionItems(emailContent: string, subject: string): Promise<TaskExtractionResult> {
+    if (!this.apiKey) {
+      console.warn('No Claude API key found, using fallback extraction');
+      return this.fallbackExtraction(emailContent, subject);
+    }
+
+    try {
+      const prompt = this.buildActionItemPrompt(emailContent, subject);
+      const response = await this.callClaude(prompt);
+      return this.parseResponse(response, emailContent);
+    } catch (error) {
+      console.error('Claude action item extraction failed, using fallback', error);
+      return this.fallbackExtraction(emailContent, subject);
+    }
+  }
+
+  /**
+   * Build the action item extraction prompt for non-meeting emails
+   */
+  private buildActionItemPrompt(emailContent: string, subject: string): string {
+    const content = typeof emailContent === 'string' ? emailContent : JSON.stringify(emailContent);
+
+    return `You are an expert at extracting actionable tasks from emails. Analyze the following email and extract all action items, tasks, and commitments.
+
+EMAIL SUBJECT: ${subject}
+
+EMAIL CONTENT:
+${content.substring(0, 15000)} ${content.length > 15000 ? '... [truncated]' : ''}
+
+Extract the following information and return as JSON:
+
+1. **tasks** - Array of task objects with:
+   - description: Clear, actionable task description
+   - assignee: Person responsible (extract from email, default "Unassigned" if unclear)
+   - priority: "high", "medium", or "low" based on urgency/importance
+   - confidence: 0-100 score of how confident you are this is a real task
+   - dueDate: ISO date string if mentioned (optional)
+   - category: engineering/product/design/documentation/communication/other
+   - context: Brief context about why this task exists
+   - rawText: The original text that led to this task
+
+2. **summary** - 2-3 sentence summary of the email's main purpose
+
+3. **participants** - Array of people mentioned in the email (sender, recipients, mentioned names)
+
+4. **meetingDate** - ISO date string (use email date or today)
+
+5. **keyDecisions** - Array of important decisions or key points from the email
+
+6. **nextSteps** - Array of next step objects with:
+   - description: Clear description of the next step
+   - assignee: Person responsible (default "Unassigned")
+   - priority: "high", "medium", or "low" based on importance
+
+Guidelines for action items:
+- Look for explicit requests ("Can you...", "Please...", "Could you...")
+- Identify commitments ("I will...", "I'll...", "Let me...")
+- Extract deadlines and time constraints
+- Include follow-up items ("Need to...", "Should...", "Must...")
+- Capture FYI items that require action
+- Pay attention to urgent or important markers
+- Extract tasks from forwarded emails or threads
+- Identify implicit tasks (things that need to happen based on context)
+
+IMPORTANT:
+- For assignee matching, look for names in signatures, "From:" fields, and email addresses
+- Match assignees with participants when possible
+- If multiple people are mentioned, assign to the most relevant person
+- Set confidence lower (40-60) if assignee is unclear
+- Return ONLY valid JSON, no markdown formatting
+- Priority should reflect urgency indicators like "ASAP", "urgent", "by EOD", etc.
+
+Return your response as a single JSON object.`;
+  }
 }

@@ -12,21 +12,22 @@ import {
 } from 'obsidian';
 import { ClaudeTaskExtractor, TaskExtractionResult } from './claudeExtractor';
 import { TaskDashboardView, TASK_DASHBOARD_VIEW_TYPE } from './taskDashboard';
-import { GmailService } from './gmailService';
+import { GmailService, GmailMessage } from './gmailService';
 import { OAuthServer } from './oauthServer';
+import { processorRegistry, LabelProcessorConfig } from './emailProcessors';
 
 interface MeetingTasksSettings {
   lookbackTime: string;
-  lookbackHours: number; // Keep for backward compatibility
   debugMode: boolean;
   anthropicApiKey: string;
   googleClientId: string;
   googleClientSecret: string;
-  notesFolder: string;
   claudeModel: string;
   dashboardShowOnlyMyTasks: boolean;
   dashboardMyName: string;
-  gmailLabels: string;
+  gmailLabels: string; // Comma-separated labels to search
+  emailNotesFolder: string; // Base folder for all email notes (e.g., "EmailNotes")
+  labelProcessors: LabelProcessorConfig[]; // Configuration for each label's processor
   gmailToken?: any;
   showDetailedNotifications: boolean;
   processedEmails?: string[]; // Track which emails have been processed
@@ -34,16 +35,27 @@ interface MeetingTasksSettings {
 
 const DEFAULT_SETTINGS: MeetingTasksSettings = {
   lookbackTime: '5d',
-  lookbackHours: 120, // Keep for backward compatibility
   debugMode: false,
   anthropicApiKey: '',
   googleClientId: '',
   googleClientSecret: '',
-  notesFolder: 'Meetings',
   claudeModel: 'claude-3-5-haiku-20241022',
   dashboardShowOnlyMyTasks: true,
   dashboardMyName: '',
-  gmailLabels: 'transcript',
+  gmailLabels: 'transcript, action',
+  emailNotesFolder: 'TaskAgent',
+  labelProcessors: [
+    {
+      label: 'transcript',
+      folderName: 'Transcript',
+      promptType: 'meeting',
+    },
+    {
+      label: 'action',
+      folderName: 'Action',
+      promptType: 'actionitem',
+    },
+  ],
   gmailToken: null,
   showDetailedNotifications: true,
 };
@@ -61,7 +73,7 @@ export default class MeetingTasksPlugin extends Plugin {
     const match = timeStr.match(/^(\d+(?:\.\d+)?)\s*([hdwM]?)$/);
 
     if (!match) {
-      // If no unit, assume hours for backward compatibility
+      // If no unit, default to hours
       const num = parseFloat(timeStr);
       return isNaN(num) ? 120 : num;
     }
@@ -95,23 +107,26 @@ export default class MeetingTasksPlugin extends Plugin {
   }
 
   async loadEmailIdCache() {
-    // Load all email IDs from existing meeting notes
+    // Load all email IDs from existing notes in base email folder
     console.log('[LoadCache] Starting to load email IDs from vault notes...');
     this.emailIdCache.clear();
 
     const files = this.app.vault.getMarkdownFiles();
     console.log(`[LoadCache] Found ${files.length} total markdown files in vault`);
 
-    let meetingNoteCount = 0;
+    const baseFolder = this.settings.emailNotesFolder;
+    console.log(`[LoadCache] Scanning base folder: ${baseFolder}`);
+
+    let emailNoteCount = 0;
     let emailIdCount = 0;
 
     for (const file of files) {
-      // Only check files in the meetings folder
-      if (!file.path.startsWith(this.settings.notesFolder)) {
+      // Only check files in base email notes folder
+      if (!file.path.startsWith(baseFolder)) {
         continue;
       }
 
-      meetingNoteCount++;
+      emailNoteCount++;
 
       try {
         const content = await this.app.vault.read(file);
@@ -131,7 +146,7 @@ export default class MeetingTasksPlugin extends Plugin {
       }
     }
 
-    console.log(`[LoadCache] Scanned ${meetingNoteCount} meeting notes, found ${emailIdCount} email IDs`);
+    console.log(`[LoadCache] Scanned ${emailNoteCount} email notes, found ${emailIdCount} email IDs`);
     console.log(`[LoadCache] Cache now contains ${this.emailIdCache.size} unique email IDs`);
 
     // Update settings with the loaded email IDs
@@ -149,12 +164,12 @@ export default class MeetingTasksPlugin extends Plugin {
     const data = await this.loadData();
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
 
-    // Handle backward compatibility
-    if (data?.lookbackHours && !data?.lookbackTime) {
-      this.settings.lookbackTime = this.formatTimeString(data.lookbackHours);
-      this.settings.lookbackHours = data.lookbackHours;
-    } else if (this.settings.lookbackTime) {
-      this.settings.lookbackHours = this.parseTimeToHours(this.settings.lookbackTime);
+    // Initialize label processors from configuration
+    if (this.settings.labelProcessors && this.settings.labelProcessors.length > 0) {
+      processorRegistry.initializeFromConfig(this.settings.labelProcessors);
+      console.log(`[Plugin] Initialized ${this.settings.labelProcessors.length} label processors`);
+    } else {
+      console.warn('[Plugin] No label processors configured, using defaults');
     }
 
     // Initialize cache from settings first (for quick access)
@@ -170,11 +185,11 @@ export default class MeetingTasksPlugin extends Plugin {
       console.log(`[Plugin] Found ${this.emailIdCache.size} existing meeting notes in vault`);
     });
 
-    // Register delete event handler for meeting notes
+    // Register delete event handler for email notes
     this.registerEvent(
       this.app.vault.on('delete', async (file) => {
-        if (file instanceof TFile && file.extension === 'md' && file.path.startsWith(this.settings.notesFolder)) {
-          console.log(`[Delete] Meeting note deleted: ${file.path}`);
+        if (file instanceof TFile && file.extension === 'md' && file.path.startsWith(this.settings.emailNotesFolder)) {
+          console.log(`[Delete] Email note deleted: ${file.path}`);
 
           // Try to extract email ID from the deleted file's cache
           const cache = this.app.metadataCache.getFileCache(file);
@@ -199,13 +214,13 @@ export default class MeetingTasksPlugin extends Plugin {
     this.registerEvent(
       this.app.vault.on('rename', async (file, oldPath) => {
         if (file instanceof TFile && file.extension === 'md') {
-          // Check if file moved out of meetings folder
-          const wasInMeetings = oldPath.startsWith(this.settings.notesFolder);
-          const nowInMeetings = file.path.startsWith(this.settings.notesFolder);
+          // Check if file moved in/out of email notes folder
+          const wasInEmailFolder = oldPath.startsWith(this.settings.emailNotesFolder);
+          const nowInEmailFolder = file.path.startsWith(this.settings.emailNotesFolder);
 
-          if (wasInMeetings && !nowInMeetings) {
-            // File moved out of meetings folder - remove from cache
-            console.log(`[Rename] File moved out of meetings folder: ${oldPath} -> ${file.path}`);
+          if (wasInEmailFolder && !nowInEmailFolder) {
+            // File moved out of email notes folder - remove from cache
+            console.log(`[Rename] File moved out of email notes folder: ${oldPath} -> ${file.path}`);
             const cache = this.app.metadataCache.getFileCache(file);
             if (cache?.frontmatter?.emailId) {
               const emailId = cache.frontmatter.emailId;
@@ -218,9 +233,9 @@ export default class MeetingTasksPlugin extends Plugin {
             } else {
               console.log(`[Rename] File has no emailId in frontmatter, skipping cache update`);
             }
-          } else if (!wasInMeetings && nowInMeetings) {
-            // File moved into meetings folder - add to cache if it has an emailId
-            console.log(`[Rename] File moved into meetings folder: ${oldPath} -> ${file.path}`);
+          } else if (!wasInEmailFolder && nowInEmailFolder) {
+            // File moved into email notes folder - add to cache if it has an emailId
+            console.log(`[Rename] File moved into email notes folder: ${oldPath} -> ${file.path}`);
 
             // Wait a moment for metadata cache to update
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -526,15 +541,40 @@ export default class MeetingTasksPlugin extends Plugin {
           console.log(`[Process] Starting email ${idx + 1}/${batch.length}: ${email.id}`);
 
           try {
-            const result = await this.processTranscriptEmail(email);
+            console.log(`[Process] Email ${email.id} has searchedLabels:`, email.searchedLabels);
+
+            // Get appropriate processor for this email
+            const processor = processorRegistry.getProcessor(email);
+
+            if (!processor) {
+              console.warn(`[Process] No processor found for email ${email.id} with labels:`, email.searchedLabels);
+              return null;
+            }
+
+            console.log(`[Process] Using processor: ${processor.label} -> ${processor.folderName}`);
+
+            // Create processing context
+            const context = {
+              app: this.app,
+              claudeExtractor: this.claudeExtractor,
+              anthropicApiKey: this.settings.anthropicApiKey,
+              emailIdCache: this.emailIdCache,
+              emailNotesFolder: this.settings.emailNotesFolder,
+              saveSettings: async () => {
+                this.settings.processedEmails = Array.from(this.emailIdCache);
+                await this.saveSettings();
+              },
+            };
+
+            // Process email using the selected processor
+            const result = await processor.process(email, context);
             const elapsed = Date.now() - emailStartTime;
 
             if (result.success) {
               const successMsg = this.settings.showDetailedNotifications && result.emailTitle
-                ? `[Process] ✅ "${result.emailTitle}" succeeded in ${elapsed}ms (${result.taskCount} tasks, ${result.confidence}% confidence)`
-                : `[Process] ✅ Email ${idx + 1} succeeded in ${elapsed}ms (${result.taskCount} tasks, ${result.confidence}% confidence)`;
+                ? `[Process] ✅ [${processor.folderName}] "${result.emailTitle}" succeeded in ${elapsed}ms (${result.taskCount} tasks, ${result.confidence}% confidence)`
+                : `[Process] ✅ [${processor.folderName}] Email ${idx + 1} succeeded in ${elapsed}ms (${result.taskCount} tasks, ${result.confidence}% confidence)`;
               console.log(successMsg);
-              // Note: We don't add to cache here as createMeetingNote handles it
               return result;
             } else {
               const failMsg = this.settings.showDetailedNotifications && email.subject
@@ -604,313 +644,6 @@ export default class MeetingTasksPlugin extends Plugin {
     }
   }
 
-  private async processTranscriptEmail(email: any): Promise<{
-    success: boolean;
-    taskCount?: number;
-    highPriorityCount?: number;
-    confidence?: number;
-    obsidianPath?: string;
-    emailTitle?: string;
-  }> {
-    try {
-      console.log(`[Extract] Starting processing for: ${email.subject} (ID: ${email.id})`);
-
-      let emailContent = email.body;
-      if (typeof emailContent === 'object') {
-        emailContent = JSON.stringify(emailContent);
-      }
-
-      if (!emailContent || emailContent === '{}' || emailContent === '[object Object]') {
-        console.warn('No valid email content available');
-        return { success: false };
-      }
-
-      let extraction: TaskExtractionResult;
-
-      if (this.claudeExtractor && this.settings.anthropicApiKey) {
-        console.log(`[Extract] Starting Claude AI extraction for email ${email.id}...`);
-        const aiStartTime = Date.now();
-        extraction = await this.claudeExtractor.extractTasks(emailContent, email.subject);
-        const aiElapsed = Date.now() - aiStartTime;
-        console.log(
-          `[Extract] Claude extraction complete in ${aiElapsed}ms: ${extraction.tasks.length} tasks with ${extraction.confidence}% confidence`
-        );
-      } else {
-        console.log('No Claude API key, skipping task extraction');
-        extraction = {
-          tasks: [],
-          summary: email.subject || 'Meeting notes',
-          participants: [],
-          meetingDate: email.date ? new Date(email.date) : new Date(),
-          keyDecisions: [],
-          nextSteps: [],
-          confidence: 0,
-        };
-      }
-
-      const noteCreated = await this.createMeetingNote(email, extraction);
-
-      if (noteCreated) {
-        const highPriorityCount = extraction.tasks.filter(t => t.priority === 'high').length;
-        const emailTitle = email.subject || 'Untitled';
-
-        return {
-          success: true,
-          taskCount: extraction.tasks.length,
-          highPriorityCount,
-          confidence: extraction.confidence,
-          obsidianPath: noteCreated,
-          emailTitle: emailTitle.substring(0, 50),
-        };
-      }
-
-      return { success: false };
-    } catch (error) {
-      console.error('Failed to process transcript email:', error);
-      return { success: false };
-    }
-  }
-
-  private async createMeetingNote(
-    email: any,
-    extraction: TaskExtractionResult
-  ): Promise<string | false> {
-    try {
-      // Create year/month folder structure
-      const year = extraction.meetingDate.getFullYear();
-      const month = String(extraction.meetingDate.getMonth() + 1).padStart(2, '0');
-      const folderPath = normalizePath(`${this.settings.notesFolder}/${year}/${month}`);
-
-      // Ensure folder structure exists
-      const yearFolder = normalizePath(`${this.settings.notesFolder}/${year}`);
-      if (!this.app.vault.getAbstractFileByPath(yearFolder)) {
-        await this.app.vault.createFolder(yearFolder);
-      }
-      if (!this.app.vault.getAbstractFileByPath(folderPath)) {
-        await this.app.vault.createFolder(folderPath);
-      }
-
-      const date = extraction.meetingDate.toISOString().split('T')[0];
-      const subject = (email.subject || 'Meeting').replace(/[\\/:*?"<>|]/g, '-').substring(0, 50);
-      const fileName = `${date} - ${subject}.md`;
-      const filePath = normalizePath(`${folderPath}/${fileName}`);
-
-      // Check if file already exists and handle it
-      const existingFile = this.app.vault.getAbstractFileByPath(filePath);
-      let noteContent = this.formatMeetingNote(email, extraction);
-
-      if (existingFile instanceof TFile) {
-        console.log('Note already exists, replacing:', filePath);
-        await this.app.vault.modify(existingFile, noteContent);
-      } else {
-        await this.app.vault.create(filePath, noteContent);
-        console.log('Created note:', filePath);
-      }
-
-      // Add to cache and persist to settings
-      this.emailIdCache.add(email.id);
-      this.settings.processedEmails = Array.from(this.emailIdCache);
-      await this.saveSettings();
-
-      return filePath;
-    } catch (error) {
-      console.error('Failed to create note:', error);
-      return false;
-    }
-  }
-
-  private formatMeetingNote(email: any, extraction: TaskExtractionResult): string {
-    const date = extraction.meetingDate.toISOString().split('T')[0];
-
-    let content = `---
-title: ${email.subject || 'Meeting Notes'}
-date: ${date}
-type: meeting
-source: Gmail
-emailId: ${email.id}
-gmailUrl: ${email.gmailUrl || ''}
-participants: [${extraction.participants.map(p => `"${p}"`).join(', ')}]
-confidence: ${extraction.confidence}
-tags: [meeting, ${extraction.tasks.length > 0 ? 'has-tasks' : 'no-tasks'}]
-created: ${new Date().toISOString()}
----
-
-# ${email.subject || 'Meeting Notes'}
-
-**Date:** ${extraction.meetingDate.toLocaleDateString()}
-**From:** ${email.from || 'Unknown'}
-`;
-
-    if (extraction.participants.length > 0) {
-      content += `**Participants:** ${extraction.participants.map(p => `[[${p}]]`).join(', ')}\n`;
-    }
-
-    if (email.gmailUrl) {
-      content += `**Email:** [View in Gmail](${email.gmailUrl})\n`;
-    }
-
-    if (email.attachments && email.attachments.length > 0) {
-      content += `**Attachments:** `;
-      content += email.attachments.map((att: any) =>
-        `${att.filename} (${(att.size / 1024).toFixed(1)}KB)`
-      ).join(', ');
-      content += '\n';
-    }
-
-    content += `**Confidence:** ${extraction.confidence}%\n\n`;
-
-    if (extraction.summary) {
-      content += `## Summary\n${extraction.summary}\n\n`;
-    }
-
-    if (extraction.keyDecisions.length > 0) {
-      content += `## Key Decisions\n`;
-      for (const decision of extraction.keyDecisions) {
-        content += `- ${decision}\n`;
-      }
-      content += '\n';
-    }
-
-    if (extraction.tasks.length > 0) {
-      content += `## Action Items\n\n`;
-
-      const highPriority = extraction.tasks.filter(t => t.priority === 'high');
-      const mediumPriority = extraction.tasks.filter(t => t.priority === 'medium');
-      const lowPriority = extraction.tasks.filter(t => t.priority === 'low');
-
-      if (highPriority.length > 0) {
-        content += `### 🔴 High Priority\n`;
-        for (const task of highPriority) {
-          content += this.formatTask(task);
-        }
-        content += '\n';
-      }
-
-      if (mediumPriority.length > 0) {
-        content += `### 🟡 Medium Priority\n`;
-        for (const task of mediumPriority) {
-          content += this.formatTask(task);
-        }
-        content += '\n';
-      }
-
-      if (lowPriority.length > 0) {
-        content += `### 🟢 Low Priority\n`;
-        for (const task of lowPriority) {
-          content += this.formatTask(task);
-        }
-        content += '\n';
-      }
-    }
-
-    if (extraction.nextSteps.length > 0) {
-      content += `## Next Steps\n`;
-
-      // Group next steps by priority
-      const highPrioritySteps = extraction.nextSteps.filter(s => s.priority === 'high');
-      const mediumPrioritySteps = extraction.nextSteps.filter(s => s.priority === 'medium');
-      const lowPrioritySteps = extraction.nextSteps.filter(s => s.priority === 'low');
-
-      if (highPrioritySteps.length > 0) {
-        content += `### 🔴 High Priority\n`;
-        for (const step of highPrioritySteps) {
-          content += `- [ ] ${step.description} [[@${step.assignee}]]\n`;
-        }
-        content += '\n';
-      }
-
-      if (mediumPrioritySteps.length > 0) {
-        content += `### 🟡 Medium Priority\n`;
-        for (const step of mediumPrioritySteps) {
-          content += `- [ ] ${step.description} [[@${step.assignee}]]\n`;
-        }
-        content += '\n';
-      }
-
-      if (lowPrioritySteps.length > 0) {
-        content += `### 🟢 Low Priority\n`;
-        for (const step of lowPrioritySteps) {
-          content += `- [ ] ${step.description} [[@${step.assignee}]]\n`;
-        }
-        content += '\n';
-      }
-    }
-
-    if (email.body) {
-      content += `## Original Email\n\`\`\`\n${email.body.substring(0, 1000)}${email.body.length > 1000 ? '...' : ''}\n\`\`\`\n`;
-    }
-
-    content += `\n---\n`;
-    content += `*Imported from Gmail on ${new Date().toLocaleString()}*\n\n`;
-    content += `**[🔄 Reprocess this email](obsidian://meeting-tasks-reprocess?id=${email.id})**`;
-
-    return content;
-  }
-
-  private formatTask(task: any): string {
-    const dueDate = task.dueDate || this.getDefaultDueDate();
-    let taskLine = `- [ ] ${task.description} [[@${task.assignee}]] 📅 ${dueDate}`;
-
-    if (task.confidence < 70) {
-      taskLine += ` ⚠️ ${task.confidence}%`;
-    }
-
-    if (task.category && task.category !== 'other') {
-      taskLine += ` #${task.category}`;
-    }
-
-    taskLine += '\n';
-
-    if (task.context) {
-      taskLine += `  - Context: ${task.context}\n`;
-    }
-
-    if (task.rawText && task.rawText !== task.description) {
-      taskLine += `  > "${task.rawText}"\n`;
-    }
-
-    return taskLine;
-  }
-
-  private getDefaultDueDate(): string {
-    const date = new Date();
-    date.setDate(date.getDate() + 7);
-    return date.toISOString().split('T')[0];
-  }
-
-  updateStatus(status: string) {
-    if (this.statusBarItem) {
-      this.statusBarItem.setText(`📧 ${status}`);
-    }
-  }
-
-  async openTaskDashboard() {
-    const { workspace } = this.app;
-    const leaves = workspace.getLeavesOfType(TASK_DASHBOARD_VIEW_TYPE);
-
-    if (leaves.length > 0) {
-      workspace.revealLeaf(leaves[0]);
-    } else {
-      const leaf = workspace.getRightLeaf(false);
-      if (leaf) {
-        await leaf.setViewState({
-          type: TASK_DASHBOARD_VIEW_TYPE,
-          active: true,
-        });
-        workspace.revealLeaf(leaf);
-      }
-    }
-  }
-
-  async loadSettings() {
-    const data = await this.loadData();
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
-  }
-
-  async saveSettings() {
-    await this.saveData(this.settings);
-  }
-
   async reprocessEmailById(emailId: string, replaceExisting: boolean = true) {
     try {
       console.log(`[reprocessEmailById] Reprocessing email: ${emailId}`);
@@ -944,7 +677,7 @@ created: ${new Date().toISOString()}
       if (replaceExisting) {
         const files = this.app.vault.getMarkdownFiles();
         for (const file of files) {
-          if (!file.path.startsWith(this.settings.notesFolder)) continue;
+          if (!file.path.startsWith(this.settings.emailNotesFolder)) continue;
 
           try {
             const content = await this.app.vault.read(file);
@@ -966,26 +699,35 @@ created: ${new Date().toISOString()}
       // Remove from processed list to allow reprocessing
       this.emailIdCache.delete(emailId);
 
+      // Get appropriate processor for this email
+      const processor = processorRegistry.getProcessor(email);
+      if (!processor) {
+        new Notice(`No processor found for email with labels: ${email.searchedLabels?.join(', ')}`);
+        return;
+      }
+
+      // Delete existing file first if requested
+      if (existingFile) {
+        console.log(`[Reprocess] Deleting old note: ${existingFile.path}`);
+        await this.app.vault.delete(existingFile);
+      }
+
       // Process the email with latest extraction logic
-      const result = await this.processTranscriptEmail(email);
+      const context = {
+        app: this.app,
+        claudeExtractor: this.claudeExtractor,
+        anthropicApiKey: this.settings.anthropicApiKey,
+        emailIdCache: this.emailIdCache,
+        emailNotesFolder: this.settings.emailNotesFolder,
+        saveSettings: async () => {
+          this.settings.processedEmails = Array.from(this.emailIdCache);
+          await this.saveSettings();
+        },
+      };
+
+      const result = await processor.process(email, context);
 
       if (result.success) {
-        // If we found an existing file and successfully reprocessed, delete the old one
-        // The new one was created by processTranscriptEmail
-        if (existingFile && result.obsidianPath) {
-          // The new file path from processTranscriptEmail
-          const newFilePath = result.obsidianPath;
-
-          // Only delete if they're different files
-          if (existingFile.path !== newFilePath) {
-            console.log(`[Reprocess] Deleting old note: ${existingFile.path}`);
-            await this.app.vault.delete(existingFile);
-            new Notice(`✅ Replaced old note with updated version`);
-          } else {
-            // Same file path, so it was already overwritten
-            console.log(`[Reprocess] Note updated in place: ${existingFile.path}`);
-          }
-        }
 
         this.emailIdCache.add(emailId);
         this.settings.processedEmails = Array.from(this.emailIdCache);
@@ -993,14 +735,6 @@ created: ${new Date().toISOString()}
 
         new Notice(`✅ Reprocessed email with ${result.taskCount || 0} tasks (Confidence: ${result.confidence}%)`);
         this.updateStatus(`✅ Reprocessed with ${result.taskCount || 0} tasks`);
-
-        // Open the newly created/updated note
-        if (result.obsidianPath) {
-          const file = this.app.vault.getAbstractFileByPath(result.obsidianPath);
-          if (file instanceof TFile) {
-            await this.app.workspace.getLeaf(false).openFile(file);
-          }
-        }
       } else {
         new Notice('❌ Failed to reprocess email');
         this.updateStatus('❌ Reprocessing failed');
@@ -1009,6 +743,30 @@ created: ${new Date().toISOString()}
       console.error('Error reprocessing email:', error);
       new Notice(`❌ Error: ${error.message}`);
       this.updateStatus('❌ Error reprocessing');
+    }
+  }
+
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
+
+  updateStatus(status: string) {
+    if (this.statusBarItem) {
+      this.statusBarItem.setText(`📧 ${status}`);
+    }
+  }
+
+  async openTaskDashboard() {
+    const { workspace } = this.app;
+    const leaves = workspace.getLeavesOfType(TASK_DASHBOARD_VIEW_TYPE);
+
+    if (leaves.length > 0) {
+      workspace.revealLeaf(leaves[0]);
+    } else {
+      await workspace.getRightLeaf(false)?.setViewState({
+        type: TASK_DASHBOARD_VIEW_TYPE,
+        active: true,
+      });
     }
   }
 
@@ -1039,61 +797,8 @@ created: ${new Date().toISOString()}
 
       const emailId = emailIdMatch[1].trim();
 
-      const confirmed = confirm(
-        `Reprocess Meeting Note?\n\nThis will fetch the original email and regenerate the summary and tasks.\n\nEmail ID: ${emailId}`
-      );
-
-      if (!confirmed) {
-        return;
-      }
-
-      this.updateStatus('Reprocessing...');
-      new Notice('Fetching original email...');
-
-      if (!this.gmailService || !this.gmailService.isAuthenticated()) {
-        new Notice('Gmail not connected. Please authenticate first.');
-        this.updateStatus('Gmail not connected');
-        return;
-      }
-
-      console.log(`Reading email with ID: ${emailId}`);
-      const email = await this.gmailService.getEmailById(emailId);
-
-      if (!email) {
-        new Notice('Could not find the original email. It may have been deleted.');
-        this.updateStatus('Ready');
-        return;
-      }
-
-      console.log('Found email:', email.subject);
-      new Notice('Extracting tasks and summary...');
-
-      const emailContent = email.body || email.snippet || '';
-
-      let extraction: TaskExtractionResult;
-
-      if (this.claudeExtractor && this.settings.anthropicApiKey) {
-        console.log('Reprocessing with Claude...');
-        extraction = await this.claudeExtractor.extractTasks(emailContent, email.subject);
-        console.log(
-          `Extracted ${extraction.tasks.length} tasks with ${extraction.confidence}% confidence`
-        );
-      } else {
-        console.log('Claude extractor not available for reprocessing');
-        new Notice('❌ Claude AI not configured - cannot reprocess');
-        return;
-      }
-
-      const newContent = this.formatMeetingNote(email, extraction);
-      await this.app.vault.modify(activeFile, newContent);
-
-      const taskCount = extraction.tasks.length;
-      const highPriorityCount = extraction.tasks.filter(t => t.priority === 'high').length;
-
-      this.updateStatus(`Reprocessed: ${taskCount} tasks`);
-      new Notice(
-        `✅ Reprocessed successfully! Found ${taskCount} task${taskCount !== 1 ? 's' : ''} (${highPriorityCount} high priority)`
-      );
+      // Use the main reprocessing method
+      await this.reprocessEmailById(emailId, true);
     } catch (error) {
       console.error('Failed to reprocess meeting note:', error);
       new Notice(`Error reprocessing: ${error.message}`);
@@ -1370,7 +1075,6 @@ class MeetingTasksSettingTab extends PluginSettingTab {
             const hours = this.plugin.parseTimeToHours(value);
             if (hours > 0) {
               this.plugin.settings.lookbackTime = value;
-              this.plugin.settings.lookbackHours = hours; // Keep for backward compatibility
               await this.plugin.saveSettings();
             }
           })
@@ -1429,14 +1133,14 @@ class MeetingTasksSettingTab extends PluginSettingTab {
     containerEl.createEl('h3', { text: 'Obsidian Settings' });
 
     new Setting(containerEl)
-      .setName('Notes folder')
-      .setDesc('Where to create meeting notes')
+      .setName('Email notes folder')
+      .setDesc('Base folder for all email-based notes (organized by label inside)')
       .addText(text =>
         text
-          .setPlaceholder('Meetings')
-          .setValue(this.plugin.settings.notesFolder)
+          .setPlaceholder('TaskAgent')
+          .setValue(this.plugin.settings.emailNotesFolder)
           .onChange(async value => {
-            this.plugin.settings.notesFolder = value;
+            this.plugin.settings.emailNotesFolder = value || 'TaskAgent';
             await this.plugin.saveSettings();
           })
       );

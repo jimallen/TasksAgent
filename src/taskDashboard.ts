@@ -77,6 +77,7 @@ export class TaskDashboardView extends ItemView {
   }
 
   async onOpen() {
+    console.log('[TaskDashboard] onOpen called');
     await this.refresh();
   }
 
@@ -90,20 +91,24 @@ export class TaskDashboardView extends ItemView {
   }
 
   async refresh() {
+    console.log('[TaskDashboard] refresh called');
+    console.log('[TaskDashboard] containerEl:', this.containerEl);
+    console.log('[TaskDashboard] containerEl.children:', this.containerEl.children);
     const container = this.containerEl.children[1] as HTMLElement;
+    console.log('[TaskDashboard] container:', container);
     container.empty();
-    
+
     // Add dashboard class for styling
     container.addClass('dashboard');
     container.addClass('markdown-preview-view');
-    
+
     // Show loading state
     this.showLoadingState(container);
-    
+
     try {
       await this.loadAndDisplayDashboard(container);
     } catch (error) {
-      console.error('Failed to refresh dashboard:', error);
+      console.error('[TaskDashboard] Failed to refresh dashboard:', error);
       this.showErrorState(container, error);
     }
   }
@@ -265,16 +270,19 @@ export class TaskDashboardView extends ItemView {
   }
 
   private async loadTasks(): Promise<Task[]> {
+    console.log('[TaskDashboard] loadTasks called');
     const tasks: Task[] = [];
-    
+
     // Get all markdown files in the vault
     const files = this.app.vault.getMarkdownFiles();
-    
+    console.log('[TaskDashboard] Found', files.length, 'markdown files');
+
     for (const file of files) {
       const fileTasks = await this.extractTasksFromFile(file);
       tasks.push(...fileTasks);
     }
-    
+
+    console.log('[TaskDashboard] Loaded', tasks.length, 'total tasks');
     return tasks;
   }
 

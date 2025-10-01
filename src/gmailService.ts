@@ -8,7 +8,7 @@ interface GmailToken {
   scope?: string;
 }
 
-interface GmailMessage {
+export interface GmailMessage {
   id: string;
   threadId?: string;
   subject: string;
@@ -19,6 +19,8 @@ interface GmailMessage {
   snippet: string;
   attachments?: GmailAttachment[];
   gmailUrl?: string;
+  labels?: string[]; // Gmail's internal label IDs
+  searchedLabels?: string[]; // The label names that were searched for
 }
 
 interface GmailAttachment {
@@ -364,7 +366,8 @@ export class GmailService {
         body,
         snippet: message.snippet || '',
         attachments,
-        gmailUrl
+        gmailUrl,
+        labels: message.labelIds || []
       };
     } catch (error) {
       console.error(`Failed to get email ${messageId}:`, error);
@@ -409,32 +412,43 @@ export class GmailService {
 
     const labelList = (labels || 'transcript')
       .split(',')
-      .map(l => l.trim())
+      .map(l => l.trim().toLowerCase())
       .filter(l => l);
 
     console.log(
-      `[Gmail] Looking for emails with labels: ${labelList.join(', ')} after ${dateStr} (${hoursBack} hours back)`
+      `[Gmail] Searching for emails with labels: ${labelList.join(', ')} after ${dateStr} (${hoursBack} hours back)`
     );
 
-    let labelQuery = '';
-    if (labelList.length === 1) {
-      labelQuery = `label:${labelList[0]}`;
-    } else {
-      labelQuery = `(${labelList.map(l => `label:${l}`).join(' OR ')})`;
+    // Search for each label separately to track which label each email has
+    const allEmails = new Map<string, GmailMessage>();
+
+    for (const label of labelList) {
+      const query = `label:${label} after:${dateStr}`;
+      console.log(`[Gmail] Searching with query: "${query}"`);
+
+      const emails = await this.searchEmails(query, 500, 5, true);
+      console.log(`[Gmail] Found ${emails.length} emails with label: ${label}`);
+
+      // Add each email to the map, tracking which label(s) it has
+      for (const email of emails) {
+        if (allEmails.has(email.id)) {
+          // Email already found with another label, add this label too
+          const existing = allEmails.get(email.id)!;
+          if (!existing.searchedLabels) existing.searchedLabels = [];
+          if (!existing.searchedLabels.includes(label)) {
+            existing.searchedLabels.push(label);
+          }
+        } else {
+          // New email, set its searchedLabels
+          email.searchedLabels = [label];
+          allEmails.set(email.id, email);
+        }
+      }
     }
 
-    // Use only 'after' for date filtering - 'newer_than' with hours doesn't work well for months
-    // Gmail will handle the date filtering properly with just 'after'
-    const query = `${labelQuery} after:${dateStr}`;
-
-    console.log(`[Gmail] Full query: "${query}"`);
-
-    // Try without label restriction to see how many total emails exist
-    const queryWithoutLabel = `after:${dateStr}`;
-    console.log(`[Gmail] Also checking total emails without label filter: "${queryWithoutLabel}"`);
-
-    // Always fetch newest emails first - increased to 500 to ensure we get everything
-    return this.searchEmails(query, 500, 5, true);
+    const result = Array.from(allEmails.values());
+    console.log(`[Gmail] Total unique emails found: ${result.length}`);
+    return result;
   }
 
   isAuthenticated(): boolean {
