@@ -11,6 +11,7 @@ graph TB
     subgraph "Obsidian Plugin"
         A[Main Plugin<br/>main.ts] --> B[Gmail Service<br/>gmailService.ts]
         A --> C[Claude Extractor<br/>claudeExtractor.ts]
+        A --> C2[Task Clusterer<br/>taskClusterer.ts]
         A --> D[Task Dashboard<br/>taskDashboard.ts]
         A --> E[OAuth Server<br/>oauthServer.ts]
         A --> F[Processor Registry<br/>ProcessorRegistry.ts]
@@ -24,11 +25,19 @@ graph TB
         C --> K[Meeting Extraction]
         C --> L[Action Item Extraction]
 
+        C2 --> K2[Task Clustering]
+        C2 --> L2[Cluster ID Assignment]
+
         H --> M[Note Creation]
         M --> N[Folder Organization]
 
+        A --> N2[Auto Clustering<br/>Post-Import]
+        N2 --> C2
+
         D --> O[Task Visualization]
         D --> P[Task Filtering]
+        D --> P2[Cluster View]
+        D --> P3[Auto-Restore Clusters]
     end
 
     subgraph "External APIs"
@@ -42,22 +51,28 @@ graph TB
         U[OAuth Tokens]
         V[Processed Email Cache]
         W[Email Notes<br/>Vault Files]
+        W2[Cluster IDs<br/>In Task Lines]
     end
 
     B -.-> Q
     C -.-> R
+    C2 -.-> R
     E -.-> S
 
     A --> T
     I --> U
     A --> V
     M --> W
+    L2 --> W2
+    P3 --> W2
 
     style A fill:#f9f,stroke:#333,stroke-width:4px
+    style C2 fill:#9f6,stroke:#333,stroke-width:3px
     style F fill:#f96,stroke:#333,stroke-width:3px
     style Q fill:#bbf,stroke:#333,stroke-width:2px
     style R fill:#bbf,stroke:#333,stroke-width:2px
     style S fill:#bbf,stroke:#333,stroke-width:2px
+    style W2 fill:#6f9,stroke:#333,stroke-width:2px
 ```
 
 ## Component Architecture
@@ -118,17 +133,31 @@ graph TB
   - Confidence scoring
   - Fallback extraction mode
 
-#### 6. Task Dashboard (taskDashboard.ts)
+#### 6. Task Clusterer (taskClusterer.ts)
+- **Purpose**: AI-powered task clustering and similarity detection
+- **Capabilities**:
+  - **Intelligent grouping** of similar/related tasks
+  - **Duplicate detection** and consolidation suggestions
+  - **Project-based clustering** for related work items
+  - **Combination recommendations** with confidence scoring
+  - **Automatic clustering** during email import
+  - **Parallel processing** alongside extraction
+  - **Persistent storage** via cluster IDs in task lines
+
+#### 7. Task Dashboard (taskDashboard.ts)
 - **Purpose**: Visual task management interface
 - **Features**:
+  - **Cluster view** with expandable groups
+  - **Auto-restore** clustering from saved IDs
   - Priority-based task organization
   - Interactive task completion
-  - Advanced filtering options
+  - Advanced filtering options (works in both normal and clustered views)
   - Real-time statistics
   - My Tasks/All Tasks toggle
   - Next steps visualization with assignees
+  - Combined task suggestions from Claude
 
-#### 7. OAuth Server (oauthServer.ts)
+#### 8. OAuth Server (oauthServer.ts)
 - **Purpose**: Local OAuth callback handler
 - **Functions**:
   - Temporary HTTP server for OAuth flow
@@ -174,6 +203,7 @@ sequenceDiagram
     participant Processor
     participant Gmail
     participant Claude
+    participant Clusterer
     participant Vault
 
     User->>Plugin: Trigger email processing
@@ -189,7 +219,7 @@ sequenceDiagram
 
     Plugin->>Plugin: Filter unprocessed emails
 
-    loop For each email
+    loop For each batch (3-5 emails)
         Plugin->>Gmail: Fetch full email
         Gmail-->>Plugin: Email content
 
@@ -202,13 +232,21 @@ sequenceDiagram
 
         Processor->>Vault: Create note in label folder
         Processor->>Plugin: Update cache
+
+        Note over Plugin,Clusterer: Parallel clustering
+        Plugin->>Clusterer: Cluster all vault tasks (background)
+        Clusterer->>Vault: Load all incomplete tasks
+        Clusterer->>Claude: Analyze for similarities
+        Claude-->>Clusterer: Cluster assignments
+        Clusterer->>Vault: Save cluster IDs to task lines
     end
 
     Plugin->>User: Show completion notice
 
     User->>Plugin: Open dashboard
-    Plugin->>Vault: Load all tasks
-    Plugin->>User: Display task dashboard
+    Plugin->>Vault: Load all tasks (with cluster IDs)
+    Plugin->>Plugin: Auto-restore clusters from IDs
+    Plugin->>User: Display task dashboard (clustered view)
 ```
 
 ## Configuration Model
@@ -308,13 +346,27 @@ interface TaskStructure {
   content: string;           // Task description
   assignee?: string;         // [[@Person]]
   priority: 'high' | 'medium' | 'low';
-  dueDate?: string;         // YYYY-MM-DD format
-  confidence?: number;       // 0-100 percentage
+  dueDate?: string;         // YYYY-MM-DD format (📅 2025-01-20)
+  confidence?: number;       // 0-100 percentage (⚠️ 85%)
   category?: string;        // #tag format
   context?: string;         // Additional information
   originalQuote?: string;   // From email/transcript
+  clusterId?: string;       // Cluster assignment (🧩 cluster:abc123)
 }
 ```
+
+### Task Line Example
+
+```markdown
+- [ ] Review API documentation [[@John]] 📅 2025-01-20 🔴 🧩 cluster:cluster-1736789012-abc123 #engineering
+```
+
+**Metadata Markers:**
+- `[[@John]]` - Assignee
+- `📅 2025-01-20` - Due date
+- `🔴` - High priority (🟡 medium, 🟢 low)
+- `🧩 cluster:abc123` - Cluster ID (persisted)
+- `#engineering` - Category tag
 
 ## Performance Characteristics
 
@@ -431,11 +483,89 @@ The architecture supports custom extraction prompts (planned feature):
 }
 ```
 
+## Task Clustering Architecture
+
+### Clustering Flow
+
+```mermaid
+graph LR
+    A[Email Import] --> B[Extract Tasks]
+    B --> C[Batch Complete]
+    C --> D[Trigger Clustering]
+
+    D --> E[Load All Tasks]
+    E --> F[Filter Incomplete]
+
+    F --> G{Enough Tasks?}
+    G -->|< 2 tasks| H[Skip]
+    G -->|≥ 2 tasks| I[Send to Claude]
+
+    I --> J[Analyze Similarities]
+    J --> K[Group Related Tasks]
+    K --> L[Generate Clusters]
+
+    L --> M[Save Cluster IDs]
+    M --> N[Update Task Lines]
+    N --> O[🧩 cluster:xyz added]
+
+    O --> P[Dashboard Auto-Restores]
+
+    style D fill:#9f6,stroke:#333,stroke-width:2px
+    style I fill:#bbf,stroke:#333,stroke-width:2px
+    style M fill:#6f9,stroke:#333,stroke-width:2px
+```
+
+### Cluster Persistence Model
+
+```mermaid
+graph TB
+    subgraph "Task Storage in Markdown"
+        A[Task Line] --> B[Core Content]
+        A --> C[Metadata]
+
+        C --> D[Assignee: [[@Name]]]
+        C --> E[Due Date: 📅 YYYY-MM-DD]
+        C --> F[Priority: 🔴🟡🟢]
+        C --> G[Cluster: 🧩 cluster:id]
+        C --> H[Category: #tag]
+    end
+
+    subgraph "Cluster Loading"
+        I[Dashboard Loads] --> J[Read All Tasks]
+        J --> K[Extract Cluster IDs]
+        K --> L{Clusters Found?}
+
+        L -->|Yes| M[Group by Cluster ID]
+        L -->|No| N[Show Normal View]
+
+        M --> O[Build Cluster Objects]
+        O --> P[Display Clustered View]
+    end
+
+    G -.-> K
+
+    style G fill:#9f6,stroke:#333,stroke-width:2px
+    style M fill:#6f9,stroke:#333,stroke-width:2px
+```
+
+### Clustering Features
+
+1. **Automatic Clustering**: Runs in parallel after each email batch import
+2. **Persistent Storage**: Cluster IDs saved directly in markdown task lines
+3. **Auto-Restore**: Dashboard automatically rebuilds clusters from saved IDs
+4. **Smart Grouping**: Claude analyzes task descriptions, categories, assignees, priorities
+5. **Duplicate Detection**: Identifies similar or duplicate tasks
+6. **Combination Suggestions**: Recommends merging related tasks with confidence scores
+7. **Filter Integration**: All filters (priority, date, etc.) work in clustered view
+8. **Manual Control**: Users can manually trigger re-clustering or clear clusters
+
 ## Future Architecture Considerations
 
 - **WebSocket Support**: For real-time email monitoring
 - **Custom Prompt UI**: For defining extraction templates
+- **Custom Clustering Prompts**: User-defined clustering logic
+- **Cluster Templates**: Save and reuse clustering configurations
 - **Sync Service**: For multi-device task synchronization
 - **Template Engine**: For customizable note formats
-- **Analytics Dashboard**: For productivity insights
-- **Bulk Operations**: For batch task management
+- **Analytics Dashboard**: For productivity insights with cluster insights
+- **Bulk Operations**: For batch task management across clusters

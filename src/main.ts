@@ -15,6 +15,7 @@ import { TaskDashboardView, TASK_DASHBOARD_VIEW_TYPE } from './taskDashboard';
 import { GmailService, GmailMessage } from './gmailService';
 import { OAuthServer } from './oauthServer';
 import { processorRegistry, LabelProcessorConfig } from './emailProcessors';
+import { TaskClusterer } from './taskClusterer';
 
 interface MeetingTasksSettings {
   lookbackTime: string;
@@ -64,6 +65,7 @@ export default class MeetingTasksPlugin extends Plugin {
   settings: MeetingTasksSettings;
   gmailService: GmailService | null = null;
   claudeExtractor: ClaudeTaskExtractor | null = null;
+  taskClusterer: TaskClusterer | null = null;
   oauthServer: OAuthServer | null = null;
   private statusBarItem: HTMLElement | null = null;
   private emailIdCache: Set<string> = new Set(); // Cache for performance
@@ -428,6 +430,10 @@ export default class MeetingTasksPlugin extends Plugin {
           this.settings.anthropicApiKey,
           this.settings.claudeModel
         );
+        this.taskClusterer = new TaskClusterer(
+          this.settings.anthropicApiKey,
+          this.settings.claudeModel
+        );
       }
     } catch (error) {
       console.error('Failed to initialize services:', error);
@@ -613,6 +619,13 @@ export default class MeetingTasksPlugin extends Plugin {
               }
             }
           }
+        }
+
+        // Run clustering in parallel after each batch completes
+        if (successCount > 0 && this.taskClusterer) {
+          this.clusterNewlyCreatedTasks().catch(err => {
+            console.error('[Process] Background clustering failed:', err);
+          });
         }
       }
 
@@ -838,6 +851,170 @@ export default class MeetingTasksPlugin extends Plugin {
       console.error('Reset failed:', error);
       new Notice(`Reset failed: ${error.message}`);
       this.updateStatus('Error');
+    }
+  }
+
+  async clusterNewlyCreatedTasks() {
+    try {
+      if (!this.taskClusterer) {
+        console.log('[Clustering] Task clusterer not initialized');
+        return;
+      }
+
+      console.log('[Clustering] Starting background clustering of all tasks...');
+
+      // Load all tasks from vault
+      const allTasks = await this.loadAllTasksFromVault();
+      const incompleteTasks = allTasks.filter(t => !t.completed);
+
+      if (incompleteTasks.length < 2) {
+        console.log('[Clustering] Not enough tasks to cluster');
+        return;
+      }
+
+      console.log(`[Clustering] Clustering ${incompleteTasks.length} tasks...`);
+
+      // Cluster tasks
+      const result = await this.taskClusterer.clusterTasks(incompleteTasks);
+
+      if (!result || result.clusters.length === 0) {
+        console.log('[Clustering] No clusters found');
+        return;
+      }
+
+      // Save cluster IDs to task files
+      await this.saveClusterIdsToTasks(result);
+
+      console.log(`[Clustering] ✅ Created ${result.clusters.length} clusters`);
+    } catch (error) {
+      console.error('[Clustering] Failed:', error);
+    }
+  }
+
+  private async loadAllTasksFromVault(): Promise<any[]> {
+    const tasks: any[] = [];
+    const files = this.app.vault.getMarkdownFiles();
+
+    for (const file of files) {
+      try {
+        const content = await this.app.vault.read(file);
+        const lines = content.split('\n');
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const taskMatch = line.match(/^[\s-]*\[([ x])\]\s+(.+)/);
+
+          if (taskMatch) {
+            const completed = taskMatch[1] === 'x';
+            const taskText = taskMatch[2];
+
+            // Extract priority
+            let priority: 'high' | 'medium' | 'low' = 'medium';
+            if (line.includes('🔴')) priority = 'high';
+            else if (line.includes('🟢')) priority = 'low';
+
+            // Extract assignee
+            const assigneeMatch = taskText.match(/\[\[@?([^\]]+)\]\]/);
+            const assignee = assigneeMatch ? assigneeMatch[1] : 'Unassigned';
+
+            // Extract due date
+            const dateMatch = taskText.match(/📅\s*(\d{4}-\d{2}-\d{2})/);
+            const dueDate = dateMatch ? dateMatch[1] : '';
+
+            // Extract category
+            const categoryMatch = taskText.match(/#(\w+)/);
+            const category = categoryMatch ? categoryMatch[1] : 'general';
+
+            // Extract cluster ID
+            const clusterMatch = taskText.match(/🧩\s*cluster:([a-z0-9-]+)/);
+            const clusterId = clusterMatch ? clusterMatch[1] : undefined;
+
+            // Clean text
+            const cleanText = taskText
+              .replace(/\[\[@?[^\]]+\]\]/g, '')
+              .replace(/📅\s*\d{4}-\d{2}-\d{2}/g, '')
+              .replace(/🧩\s*cluster:[a-z0-9-]+/g, '')
+              .replace(/[🔴🟡🟢]/g, '')
+              .replace(/#\w+/g, '')
+              .trim();
+
+            tasks.push({
+              text: cleanText,
+              completed,
+              assignee,
+              dueDate,
+              priority,
+              category,
+              file,
+              line: i,
+              rawLine: line,
+              clusterId
+            });
+          }
+        }
+      } catch (error) {
+        // Skip files that can't be read
+        continue;
+      }
+    }
+
+    return tasks;
+  }
+
+  private async saveClusterIdsToTasks(result: any) {
+    try {
+      // Save cluster IDs to each task
+      for (const cluster of result.clusters) {
+        for (const task of cluster.tasks) {
+          await this.addClusterIdToTask(task, cluster.id);
+        }
+      }
+
+      // Clear cluster IDs from standalone tasks
+      for (const task of result.standalone) {
+        if (task.clusterId) {
+          await this.removeClusterIdFromTask(task);
+        }
+      }
+    } catch (error) {
+      console.error('[Clustering] Failed to save cluster IDs:', error);
+    }
+  }
+
+  private async addClusterIdToTask(task: any, clusterId: string) {
+    try {
+      const content = await this.app.vault.read(task.file);
+      const lines = content.split('\n');
+      let line = lines[task.line];
+
+      // Check if already has cluster ID
+      if (line.includes('🧩 cluster:')) {
+        line = line.replace(/🧩\s*cluster:[a-z0-9-]+/g, `🧩 cluster:${clusterId}`);
+      } else {
+        line = line.trimEnd() + ` 🧩 cluster:${clusterId}`;
+      }
+
+      lines[task.line] = line;
+      await this.app.vault.modify(task.file, lines.join('\n'));
+      task.clusterId = clusterId;
+    } catch (error) {
+      console.error('[Clustering] Failed to add cluster ID:', error);
+    }
+  }
+
+  private async removeClusterIdFromTask(task: any) {
+    try {
+      const content = await this.app.vault.read(task.file);
+      const lines = content.split('\n');
+      let line = lines[task.line];
+
+      line = line.replace(/\s*🧩\s*cluster:[a-z0-9-]+/g, '');
+
+      lines[task.line] = line;
+      await this.app.vault.modify(task.file, lines.join('\n'));
+      task.clusterId = undefined;
+    } catch (error) {
+      console.error('[Clustering] Failed to remove cluster ID:', error);
     }
   }
 

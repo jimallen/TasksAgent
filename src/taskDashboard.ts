@@ -1,11 +1,12 @@
-import { 
-  ItemView, 
+import {
+  ItemView,
   WorkspaceLeaf,
   TFile,
   Notice,
   MarkdownRenderer,
   Component
 } from 'obsidian';
+import { TaskClusterer, TaskCluster, ClusteringResult } from './taskClusterer';
 
 export const TASK_DASHBOARD_VIEW_TYPE = 'task-dashboard-view';
 
@@ -20,6 +21,10 @@ interface Task {
   file: TFile;
   line: number;
   rawLine: string;
+  delegatedFrom?: string;
+  delegatedDate?: string;
+  delegationChain?: Array<{ assignee: string; date: string }>;
+  clusterId?: string;
 }
 
 interface GroupedTasks {
@@ -34,6 +39,7 @@ interface FilterCounts {
   week: number;
   overdue: number;
   completed: number;
+  delegated: number;
 }
 
 interface PluginSettings {
@@ -41,6 +47,8 @@ interface PluginSettings {
   dashboardShowOnlyMyTasks?: boolean;
   notesFolder?: string;
   lookbackHours?: number;
+  anthropicApiKey?: string;
+  claudeModel?: string;
 }
 
 interface MeetingTasksPlugin {
@@ -56,6 +64,10 @@ export class TaskDashboardView extends ItemView {
   private filterCounts: FilterCounts | null = null;
   private badgeElements: Map<string, HTMLElement> = new Map();
   private updateCountsDebounceTimer: NodeJS.Timeout | null = null;
+  private cachedParticipants: string[] | null = null;
+  private taskClusterer: TaskClusterer | null = null;
+  private clusteringResult: ClusteringResult | null = null;
+  private showClustered: boolean = false;
 
   constructor(leaf: WorkspaceLeaf, plugin?: MeetingTasksPlugin) {
     super(leaf);
@@ -102,6 +114,9 @@ export class TaskDashboardView extends ItemView {
     container.addClass('dashboard');
     container.addClass('markdown-preview-view');
 
+    // Clear cached participants on refresh
+    this.cachedParticipants = null;
+
     // Show loading state
     this.showLoadingState(container);
 
@@ -133,24 +148,26 @@ export class TaskDashboardView extends ItemView {
     retryBtn.onclick = () => this.refresh();
   }
   
+  private currentFilter: string = 'all';
+
   private async loadAndDisplayDashboard(container: HTMLElement) {
     // Clear loading state
     container.empty();
-    
+
     // Create header
     const header = container.createDiv('dashboard-header');
     header.createEl('h1', { text: 'TASK DASHBOARD', cls: 'title' });
-    
+
     // Add control buttons
     const controls = header.createDiv('dashboard-controls');
-    
+
     // Add toggle button for my tasks/all tasks (only if user name is configured)
     if (this.plugin?.settings?.dashboardMyName) {
       const toggleBtn = controls.createEl('button', {
         text: this.showOnlyMyTasks ? '👥 Show All Tasks' : '👤 Show My Tasks',
         cls: 'dashboard-control-btn dashboard-toggle-btn'
       });
-      
+
       toggleBtn.onclick = () => {
         this.showOnlyMyTasks = !this.showOnlyMyTasks;
         toggleBtn.textContent = this.showOnlyMyTasks ? '👥 Show All Tasks' : '👤 Show My Tasks';
@@ -158,19 +175,41 @@ export class TaskDashboardView extends ItemView {
         this.updateTaskDisplay();
       };
     }
-    
+
+    // Add cluster button
+    const clusterBtn = controls.createEl('button', {
+      text: this.showClustered ? '📋 Show All Tasks' : '🧩 Cluster Similar Tasks',
+      cls: 'dashboard-control-btn dashboard-cluster-btn'
+    });
+
+    clusterBtn.onclick = async () => {
+      if (!this.showClustered) {
+        // Cluster tasks
+        await this.clusterCurrentTasks();
+        this.showClustered = true;
+        clusterBtn.textContent = '📋 Show All Tasks';
+        await this.displayClusteredTasks(container);
+      } else {
+        // Show normal view
+        this.showClustered = false;
+        this.clusteringResult = null;
+        clusterBtn.textContent = '🧩 Cluster Similar Tasks';
+        await this.refresh();
+      }
+    };
+
     // Add refresh button
     const refreshBtn = controls.createEl('button', {
       text: '🔄 Refresh',
       cls: 'dashboard-control-btn dashboard-refresh-btn'
     });
-    
+
     refreshBtn.onclick = () => this.refresh();
-    
+
     // Add filter buttons
     const filters = container.createDiv('dashboard-filters');
     this.createFilterButtons(filters);
-    
+
     // Load all tasks with error handling
     try {
       this.isLoading = true;
@@ -182,16 +221,35 @@ export class TaskDashboardView extends ItemView {
     } finally {
       this.isLoading = false;
     }
-    
+
+    // Check if we should auto-restore clustered view from saved cluster IDs
+    const hasClusters = this.allTasks.some(t => t.clusterId);
+    if (hasClusters && !this.clusteringResult) {
+      this.clusteringResult = this.buildClusteringFromSavedIds();
+      if (this.clusteringResult && this.clusteringResult.clusters.length > 0) {
+        this.showClustered = true;
+        clusterBtn.textContent = '📋 Show All Tasks';
+      }
+    }
+
     // Update filter counts after loading tasks (immediate update)
     this.updateFilterCounts(true);
-    
+
     // Get filtered tasks based on current view mode
-    const displayTasks = this.getFilteredTasks();
-    
-    // Create task sections
-    await this.displayTasks(container, displayTasks);
-    
+    // Delegated filter always uses all tasks, regardless of "My Tasks" toggle
+    const displayTasks = this.currentFilter === 'delegated' ? this.allTasks : this.getFilteredTasks();
+
+    // Create task sections - either clustered or normal view
+    if (this.showClustered && this.clusteringResult) {
+      await this.displayClusteredTasks(container);
+      // Re-apply current filter to clustered view
+      if (this.currentFilter !== 'all') {
+        this.applyFilterToClusters(this.currentFilter);
+      }
+    } else {
+      await this.displayTasks(container, displayTasks);
+    }
+
     // Apply custom CSS
     this.applyDashboardStyles();
   }
@@ -227,6 +285,7 @@ export class TaskDashboardView extends ItemView {
       { label: 'Past Due', filter: 'overdue', dataAttr: 'overdue', count: counts.overdue },
       { label: 'Due Today', filter: 'today', dataAttr: 'due-today', count: counts.today },
       { label: 'Due This Week', filter: 'week', dataAttr: 'due-week', count: counts.week },
+      { label: 'Delegated', filter: 'delegated', dataAttr: 'delegated', count: counts.delegated },
       { label: 'Completed', filter: 'completed', dataAttr: 'completed', count: counts.completed }
     ];
     
@@ -254,6 +313,7 @@ export class TaskDashboardView extends ItemView {
         // Toggle filter - click active button to show all
         if (btn.hasClass('active')) {
           btn.removeClass('active');
+          this.currentFilter = 'all';
           this.applyFilter('all');
         } else {
           // Remove active from all buttons
@@ -263,7 +323,14 @@ export class TaskDashboardView extends ItemView {
             }
           });
           btn.addClass('active');
-          this.applyFilter(f.filter);
+          this.currentFilter = f.filter;
+
+          // If delegated filter, reload with all tasks
+          if (f.filter === 'delegated') {
+            this.updateTaskDisplay();
+          } else {
+            this.applyFilter(f.filter);
+          }
         }
       };
     });
@@ -332,16 +399,38 @@ export class TaskDashboardView extends ItemView {
           // Extract category
           const categoryMatch = taskText.match(/#(\w+)/);
           const category = categoryMatch ? categoryMatch[1] : 'general';
-          
+
+          // Extract delegation metadata
+          const delegatedFromMatch = taskText.match(/🔗\s*delegated-from:@?([^📆🔗]+?)(?:\s*📆|\s*🔗|\s*$)/);
+          const delegatedFrom = delegatedFromMatch ? delegatedFromMatch[1].trim() : undefined;
+
+          const delegatedDateMatch = taskText.match(/📆\s*(\d{4}-\d{2}-\d{2})/);
+          const delegatedDate = delegatedDateMatch ? delegatedDateMatch[1] : undefined;
+
+          // Extract delegation chain
+          const delegationChain: Array<{ assignee: string; date: string }> = [];
+          const chainMatches = taskText.matchAll(/🔗@?([^\s]+)📆(\d{4}-\d{2}-\d{2})/g);
+          for (const match of chainMatches) {
+            delegationChain.push({ assignee: match[1], date: match[2] });
+          }
+
+          // Extract cluster ID
+          const clusterMatch = taskText.match(/🧩\s*cluster:([a-z0-9-]+)/);
+          const clusterId = clusterMatch ? clusterMatch[1] : undefined;
+
           // Clean task text
           const cleanText = taskText
             .replace(/\[\[@?[^\]]+\]\]/g, '')
             .replace(/📅\s*\d{4}-\d{2}-\d{2}/g, '')
+            .replace(/📆\s*\d{4}-\d{2}-\d{2}/g, '')
+            .replace(/🔗\s*delegated-from:@?[^📆🔗]+/g, '')
+            .replace(/🔗@?[^\s]+📆\d{4}-\d{2}-\d{2}/g, '')
+            .replace(/🧩\s*cluster:[a-z0-9-]+/g, '')
             .replace(/[🔴🟡🟢]/g, '')
             .replace(/⚠️\s*\d+%/g, '')
             .replace(/#\w+/g, '')
             .trim();
-          
+
           tasks.push({
             text: cleanText,
             completed,
@@ -352,7 +441,11 @@ export class TaskDashboardView extends ItemView {
             category,
             file,
             line: i,
-            rawLine: line
+            rawLine: line,
+            delegatedFrom,
+            delegatedDate,
+            delegationChain: delegationChain.length > 0 ? delegationChain : undefined,
+            clusterId
           });
         }
       }
@@ -546,12 +639,43 @@ export class TaskDashboardView extends ItemView {
         }
         
         if (task.confidence && task.confidence < 70) {
-          meta.createEl('span', { 
+          meta.createEl('span', {
             text: `⚠️ ${task.confidence}%`,
             cls: 'task-confidence'
           });
         }
-        
+
+        // Display delegation metadata
+        if (task.delegatedFrom) {
+          // Add "Delegated" tag
+          const delegatedTag = meta.createEl('span', {
+            cls: 'task-tag task-delegated-tag',
+            text: 'DELEGATED',
+            title: `Delegated from ${task.delegatedFrom}${task.delegatedDate ? ' on ' + task.delegatedDate : ''}`
+          });
+
+          const delegationSpan = meta.createEl('span', {
+            cls: 'task-delegation',
+            title: `Delegated from ${task.delegatedFrom}${task.delegatedDate ? ' on ' + task.delegatedDate : ''}`
+          });
+          delegationSpan.setText(`🔗 from @${task.delegatedFrom}`);
+          if (task.delegatedDate) {
+            delegationSpan.setText(`🔗 from @${task.delegatedFrom} 📆 ${task.delegatedDate}`);
+          }
+        }
+
+        // Display delegation chain if present
+        if (task.delegationChain && task.delegationChain.length > 0) {
+          const chainSpan = meta.createEl('span', {
+            cls: 'task-delegation-chain',
+            title: 'Delegation history'
+          });
+          const chainText = task.delegationChain
+            .map(d => `@${d.assignee} (${d.date})`)
+            .join(' → ');
+          chainSpan.setText(`🔗 Chain: ${chainText}`);
+        }
+
         // Source file link
         const fileLink = meta.createEl('a', {
           text: '📄',
@@ -584,33 +708,126 @@ export class TaskDashboardView extends ItemView {
         // Add edit controls for this task
         if (editControls) {
           const taskEditRow = editControls.createDiv('task-edit-row');
-          
+
           // Priority selector
           const prioritySelect = taskEditRow.createEl('select', { cls: 'task-priority-select' });
           ['high', 'medium', 'low'].forEach(p => {
             const option = prioritySelect.createEl('option', { text: p, value: p });
             if (p === task.priority) option.selected = true;
           });
-          prioritySelect.onchange = async () => {
-            await this.updateTaskPriority(task, prioritySelect.value as 'high' | 'medium' | 'low', li);
-          };
-          
-          // Assignee input
-          const assigneeInput = taskEditRow.createEl('input', { 
+
+          // Assignee input with autocomplete
+          const assigneeInput = taskEditRow.createEl('input', {
             type: 'text',
             cls: 'task-assignee-input',
-            placeholder: 'Assign to...',
+            placeholder: 'Type @ to see participants...',
             value: task.assignee
           });
-          
-          // Save button for assignee
-          const saveBtn = taskEditRow.createEl('button', { 
+
+          // Create autocomplete dropdown
+          const autocompleteDiv = taskEditRow.createEl('div', {
+            cls: 'task-assignee-autocomplete'
+          });
+          autocompleteDiv.style.display = 'none';
+
+          // Load participants from ALL notes
+          let participants: string[] = [];
+          this.loadAllParticipants().then(p => {
+            participants = p;
+          });
+
+          // Autocomplete logic
+          assigneeInput.addEventListener('input', (e) => {
+            const value = assigneeInput.value;
+            const cursorPos = assigneeInput.selectionStart || 0;
+
+            // Find if we're typing after an @
+            const textBeforeCursor = value.substring(0, cursorPos);
+            const atMatch = textBeforeCursor.match(/@(\w*)$/);
+
+            if (atMatch && participants.length > 0) {
+              const searchTerm = atMatch[1].toLowerCase();
+              const filtered = participants.filter(p =>
+                p.toLowerCase().includes(searchTerm)
+              );
+
+              if (filtered.length > 0) {
+                autocompleteDiv.empty();
+                filtered.forEach(participant => {
+                  const item = autocompleteDiv.createEl('div', {
+                    cls: 'autocomplete-item',
+                    text: participant
+                  });
+                  item.onclick = () => {
+                    // Replace @search with participant name
+                    const beforeAt = value.substring(0, cursorPos - atMatch[0].length);
+                    const afterCursor = value.substring(cursorPos);
+                    assigneeInput.value = beforeAt + participant + afterCursor;
+                    autocompleteDiv.style.display = 'none';
+                    assigneeInput.focus();
+                  };
+                });
+                autocompleteDiv.style.display = 'block';
+              } else {
+                autocompleteDiv.style.display = 'none';
+              }
+            } else {
+              autocompleteDiv.style.display = 'none';
+            }
+          });
+
+          // Hide autocomplete when clicking outside
+          assigneeInput.addEventListener('blur', () => {
+            setTimeout(() => {
+              autocompleteDiv.style.display = 'none';
+            }, 200);
+          });
+
+          // Save button (handles both priority and assignee changes with delegation tracking)
+          const saveBtn = taskEditRow.createEl('button', {
             text: '✓',
             cls: 'task-save-btn',
-            title: 'Save assignee'
+            title: 'Save changes (assignee changes are tracked as delegations)'
           });
           saveBtn.onclick = async () => {
-            await this.updateTaskAssignee(task, assigneeInput.value, li);
+            // Check if priority changed
+            const newPriority = prioritySelect.value as 'high' | 'medium' | 'low';
+            const priorityChanged = newPriority !== task.priority;
+
+            // Check if assignee changed
+            const newAssignee = assigneeInput.value.trim();
+            const assigneeChanged = newAssignee !== task.assignee && newAssignee !== '';
+
+            // Update priority if changed
+            if (priorityChanged) {
+              await this.updateTaskPriority(task, newPriority, li);
+            }
+
+            // Update assignee with delegation tracking if changed
+            if (assigneeChanged) {
+              await this.updateTaskDelegation(task, newAssignee, li);
+            }
+
+            // Close edit controls if nothing changed
+            if (!priorityChanged && !assigneeChanged) {
+              editControls.style.display = 'none';
+              taskEditBtn.classList.remove('active');
+            }
+          };
+
+          // Cancel button
+          const cancelBtn = taskEditRow.createEl('button', {
+            text: '✕',
+            cls: 'task-cancel-btn',
+            title: 'Cancel changes'
+          });
+          cancelBtn.onclick = () => {
+            // Reset values to original
+            prioritySelect.value = task.priority;
+            assigneeInput.value = task.assignee;
+            // Close edit controls
+            editControls.style.display = 'none';
+            taskEditBtn.classList.remove('active');
           };
         }
       }
@@ -805,29 +1022,119 @@ export class TaskDashboardView extends ItemView {
     }
   }
 
+  private async updateTaskDelegation(task: Task, newAssignee: string, taskElement?: HTMLElement) {
+    try {
+      console.log('[TaskDashboard] Delegating task:', task.text, 'from', task.assignee, 'to', newAssignee);
+
+      const content = await this.app.vault.read(task.file);
+      const lines = content.split('\n');
+
+      let line = lines[task.line];
+      console.log('[TaskDashboard] Original line:', line);
+
+      // Get current assignee for delegation chain
+      const currentAssignee = task.assignee;
+
+      // Check if assigning back to myself (the original delegator)
+      const myNamesStr = this.plugin?.settings?.dashboardMyName?.toLowerCase();
+      const myNames = myNamesStr
+        ? myNamesStr.split(',').map(name => name.trim()).filter(name => name.length > 0)
+        : [];
+
+      const newAssigneeLower = newAssignee.toLowerCase().trim();
+      const isAssigningToMyself = myNames.length > 0 && myNames.some(name =>
+        newAssigneeLower === name || newAssigneeLower.includes(name) || name.includes(newAssigneeLower)
+      );
+
+      // Remove existing delegation metadata FIRST (but not due date 📅)
+      // This removes: 🔗 delegated-from:@Jim Allen 📆 2025-01-01
+      line = line.replace(/🔗\s*delegated-from:@?[^📆\[]+/g, '');
+      line = line.replace(/📆\s*\d{4}-\d{2}-\d{2}/g, '');
+
+      // Then remove old assignee bracket
+      line = line.replace(/\[\[@?[^\]]+\]\]/g, '');
+
+      // Clean up extra whitespace
+      line = line.replace(/\s+/g, ' ').trim();
+
+      // If assigning back to myself, don't add delegation metadata
+      if (isAssigningToMyself) {
+        // Just add the assignee, no delegation metadata
+        const dateMatch = line.match(/📅\s*\d{4}-\d{2}-\d{2}/);
+        if (dateMatch && dateMatch.index !== undefined) {
+          line = line.substring(0, dateMatch.index) +
+                 `[[@${newAssignee.trim()}]] ` +
+                 line.substring(dateMatch.index);
+        } else {
+          line = line.trim() + ` [[@${newAssignee.trim()}]]`;
+        }
+
+        console.log('[TaskDashboard] Task assigned back to self, removing delegation metadata');
+        new Notice(`Task assigned back to ${newAssignee}`);
+
+        // Update task data
+        task.delegatedFrom = undefined;
+        task.delegatedDate = undefined;
+        task.assignee = newAssignee.trim();
+      } else {
+        // Add delegation metadata
+        const today = new Date().toISOString().split('T')[0];
+        const delegationMeta = ` 🔗 delegated-from:@${currentAssignee} 📆 ${today}`;
+
+        // Add new assignee and delegation metadata before the due date if present
+        const dateMatch = line.match(/📅\s*\d{4}-\d{2}-\d{2}/);
+        if (dateMatch && dateMatch.index !== undefined) {
+          line = line.substring(0, dateMatch.index) +
+                 `[[@${newAssignee.trim()}]]${delegationMeta} ` +
+                 line.substring(dateMatch.index);
+        } else {
+          line = line.trim() + ` [[@${newAssignee.trim()}]]${delegationMeta}`;
+        }
+
+        console.log('[TaskDashboard] Task delegated successfully. delegatedFrom:', currentAssignee);
+        new Notice(`Task delegated from ${currentAssignee} to ${newAssignee}`);
+
+        // Update task data
+        task.delegatedFrom = currentAssignee;
+        task.delegatedDate = today;
+        task.assignee = newAssignee.trim();
+      }
+
+      console.log('[TaskDashboard] Updated line:', line);
+      lines[task.line] = line;
+      await this.app.vault.modify(task.file, lines.join('\n'));
+
+      // Refresh to show updated delegation
+      setTimeout(() => this.refresh(), 500);
+    } catch (error) {
+      console.error('[TaskDashboard] Failed to delegate task:', error);
+      new Notice('Failed to delegate task. Please try again.');
+    }
+  }
+
   private async updateTaskAssignee(task: Task, newAssignee: string, taskElement?: HTMLElement) {
     try {
       const content = await this.app.vault.read(task.file);
       const lines = content.split('\n');
-    
+
     // Get the current line
     let line = lines[task.line];
-    
+
     // Remove old assignee
     line = line.replace(/\[\[@?[^\]]+\]\]/g, '');
-    
+
     // Add new assignee before the date if present, otherwise at the end
     const dateMatch = line.match(/📅\s*\d{4}-\d{2}-\d{2}/);
     if (dateMatch && dateMatch.index !== undefined) {
       // Insert before date
-      line = line.substring(0, dateMatch.index) + 
-             `[[@${newAssignee.trim()}]] ` + 
+      line = line.substring(0, dateMatch.index) +
+             `[[@${newAssignee.trim()}]] ` +
              line.substring(dateMatch.index);
     } else {
       // Add at the end
       line = line.trim() + ` [[@${newAssignee.trim()}]]`;
     }
-    
+
     lines[task.line] = line;
     
       await this.app.vault.modify(task.file, lines.join('\n'));
@@ -948,16 +1255,19 @@ export class TaskDashboardView extends ItemView {
 
   private applyFilter(filter: string) {
     const sections = this.containerEl.querySelectorAll('.task-section');
-    
+
+    // Special handling for delegated filter - always show all delegated tasks
+    const shouldShowAllTasks = filter === 'delegated';
+
     sections.forEach((section: Element) => {
       if (!(section instanceof HTMLElement)) return;
       const cards = section.querySelectorAll('.task-card');
       let sectionHasVisibleCards = false;
-      
+
       cards.forEach((card: Element) => {
         if (!(card instanceof HTMLElement)) return;
         let show = true;
-        
+
         switch(filter) {
           case 'all':
             show = true;
@@ -986,9 +1296,9 @@ export class TaskDashboardView extends ItemView {
                   .split(',')
                   .map(name => name.trim())
                   .filter(name => name.length > 0);
-                
+
                 // Check if assignee matches any of the names
-                show = myNames.some(name => 
+                show = myNames.some(name =>
                   assignee === name || assignee.includes(name)
                 );
               } else {
@@ -1007,12 +1317,15 @@ export class TaskDashboardView extends ItemView {
           case 'week':
             show = this.hasTasksDueThisWeek(card);
             break;
+          case 'delegated':
+            show = this.hasDelegatedTasks(card);
+            break;
         }
-        
+
         card.style.display = show ? 'block' : 'none';
         if (show) sectionHasVisibleCards = true;
       });
-      
+
       // Hide section if no cards are visible
       section.style.display = sectionHasVisibleCards ? 'block' : 'none';
     });
@@ -1097,18 +1410,18 @@ export class TaskDashboardView extends ItemView {
     if (card.classList.contains('completed-card')) {
       return false;
     }
-    
+
     const taskItems = card.querySelectorAll('.task-list-item');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     for (const item of Array.from(taskItems)) {
       // Skip if task is completed
       const checkbox = item.querySelector('.task-checkbox') as HTMLInputElement;
       if (checkbox && checkbox.checked) {
         continue;
       }
-      
+
       // Look for due date in the task metadata
       const dueDateElem = item.querySelector('.task-due');
       if (dueDateElem) {
@@ -1116,7 +1429,7 @@ export class TaskDashboardView extends ItemView {
         if (dateText) {
           const dueDate = new Date(dateText[0] + 'T00:00:00');
           dueDate.setHours(0, 0, 0, 0);
-          
+
           // Check if the task is overdue (past due date)
           if (dueDate < today) {
             return true; // Found at least one overdue task
@@ -1124,7 +1437,51 @@ export class TaskDashboardView extends ItemView {
         }
       }
     }
-    
+
+    return false;
+  }
+
+  private hasDelegatedTasks(card: HTMLElement): boolean {
+    // Check if this is a completed card - don't show completed for delegated filter
+    if (card.classList.contains('completed-card')) {
+      return false;
+    }
+
+    // Check against the actual tasks in allTasks array that match this card
+    const cardAssignee = card.querySelector('h3')?.textContent?.replace(/^👤\s*/, '').trim();
+    if (!cardAssignee) return false;
+
+    // Find tasks in this card that are delegated
+    const cardTasks = this.allTasks.filter(t =>
+      t.assignee === cardAssignee && !t.completed
+    );
+
+    // Get user's names for delegation matching
+    const myNamesStr = this.plugin?.settings?.dashboardMyName?.toLowerCase();
+    const myNames = myNamesStr
+      ? myNamesStr.split(',').map(name => name.trim()).filter(name => name.length > 0)
+      : [];
+
+    for (const task of cardTasks) {
+      if (task.delegatedFrom) {
+        // If no name configured, show all delegated tasks
+        if (myNames.length === 0) {
+          return true;
+        }
+
+        // Otherwise, check if delegated by me
+        const delegatedFromLower = task.delegatedFrom.toLowerCase();
+        const isDelegatedByMe = myNames.some(name =>
+          delegatedFromLower === name ||
+          delegatedFromLower.includes(name) ||
+          name.includes(delegatedFromLower)
+        );
+        if (isDelegatedByMe) {
+          return true;
+        }
+      }
+    }
+
     return false;
   }
 
@@ -1161,7 +1518,7 @@ export class TaskDashboardView extends ItemView {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
     const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    
+
     const counts: FilterCounts = {
       high: 0,
       medium: 0,
@@ -1169,20 +1526,32 @@ export class TaskDashboardView extends ItemView {
       today: 0,
       week: 0,
       overdue: 0,
-      completed: 0
+      completed: 0,
+      delegated: 0
     };
-    
+
+    // Get user's names for delegation matching
+    const myNamesStr = this.plugin?.settings?.dashboardMyName?.toLowerCase();
+    const myNames = myNamesStr
+      ? myNamesStr.split(',').map(name => name.trim()).filter(name => name.length > 0)
+      : [];
+
+    console.log('[TaskDashboard] Calculating filter counts. My names:', myNames);
+
+    // For delegated count, always use ALL tasks, not filtered
+    const allTasksForDelegation = this.allTasks;
+
     for (const task of tasks) {
       // Priority counts (only for non-completed tasks)
       if (!task.completed) {
         if (task.priority === 'high') counts.high++;
         else if (task.priority === 'medium') counts.medium++;
         else if (task.priority === 'low') counts.low++;
-        
+
         // Due date counts
         if (task.dueDate) {
           const dueDate = new Date(task.dueDate);
-          
+
           // Overdue - past due date and not completed
           if (dueDate < today) {
             counts.overdue++;
@@ -1197,13 +1566,39 @@ export class TaskDashboardView extends ItemView {
           }
         }
       }
-      
+
       // Completed count
       if (task.completed) {
         counts.completed++;
       }
     }
-    
+
+    // Delegated count - ALWAYS use all tasks, ignore "My Tasks" filter
+    for (const task of allTasksForDelegation) {
+      if (!task.completed && task.delegatedFrom) {
+        console.log('[TaskDashboard] Found delegated task:', task.text, 'delegatedFrom:', task.delegatedFrom);
+        if (myNames.length > 0) {
+          const delegatedFromLower = task.delegatedFrom.toLowerCase();
+          const isDelegatedByMe = myNames.some(name => {
+            // Check both directions: delegatedFrom matches name, or name matches delegatedFrom
+            const matches = delegatedFromLower === name ||
+                           delegatedFromLower.includes(name) ||
+                           name.includes(delegatedFromLower);
+            console.log('[TaskDashboard] Checking if "' + delegatedFromLower + '" matches "' + name + '": ' + matches);
+            return matches;
+          });
+          console.log('[TaskDashboard] isDelegatedByMe:', isDelegatedByMe);
+          if (isDelegatedByMe) {
+            counts.delegated++;
+          }
+        } else {
+          // If no name configured, count all delegated tasks
+          counts.delegated++;
+        }
+      }
+    }
+
+    console.log('[TaskDashboard] Delegated count:', counts.delegated);
     return counts;
   }
   
@@ -1248,6 +1643,7 @@ export class TaskDashboardView extends ItemView {
     updateBadge('overdue', newCounts.overdue);
     updateBadge('today', newCounts.today);
     updateBadge('week', newCounts.week);
+    updateBadge('delegated', newCounts.delegated);
     updateBadge('completed', newCounts.completed);
   }
   
@@ -1278,6 +1674,7 @@ export class TaskDashboardView extends ItemView {
       'overdue': 'overdue',
       'today': 'due-today',
       'week': 'due-week',
+      'delegated': 'delegated',
       'completed': 'completed'
     };
     return mapping[filterKey] || filterKey;
@@ -1286,23 +1683,471 @@ export class TaskDashboardView extends ItemView {
   private async updateTaskDisplay() {
     try {
       const container = this.containerEl.children[1] as HTMLElement;
-      
+
       // Find and clear the task sections
       const taskSections = container.querySelectorAll('.task-section');
-      
+
       // Remove old task sections
       taskSections.forEach(section => section.remove());
-      
+
       // Re-display tasks with current filter
-      const displayTasks = this.getFilteredTasks();
+      // Delegated filter always uses all tasks
+      const displayTasks = this.currentFilter === 'delegated' ? this.allTasks : this.getFilteredTasks();
       await this.displayTasks(container, displayTasks);
+
+      // Re-apply the current filter after displaying
+      if (this.currentFilter !== 'all') {
+        this.applyFilter(this.currentFilter);
+      }
     } catch (error) {
       console.error('Failed to update task display:', error);
       new Notice('Failed to update display. Please refresh.');
     }
   }
   
+  private async loadAllParticipants(): Promise<string[]> {
+    // Return cached participants if available
+    if (this.cachedParticipants) {
+      return this.cachedParticipants;
+    }
+
+    try {
+      const participants = new Set<string>();
+      const files = this.app.vault.getMarkdownFiles();
+
+      for (const file of files) {
+        try {
+          const content = await this.app.vault.read(file);
+
+          // Only process files with emailId in frontmatter
+          const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+          if (!frontmatterMatch) continue;
+
+          const frontmatter = frontmatterMatch[1];
+          if (!frontmatter.includes('emailId:')) continue;
+
+          // Extract participants from the "## Participants" section
+          const participantsMatch = content.match(/## Participants\s*\n((?:- .+\n?)+)/);
+          if (participantsMatch) {
+            const lines = participantsMatch[1].split('\n');
+            lines.forEach(line => {
+              const nameMatch = line.match(/^- (.+)$/);
+              if (nameMatch) {
+                const name = nameMatch[1].trim();
+                // Only add if it looks like a person's name (contains letters, not URLs, not too long)
+                if (name.length > 0 &&
+                    name.length < 50 &&
+                    !name.includes('http') &&
+                    !name.includes('www.') &&
+                    /^[a-zA-Z\s\-\.]+$/.test(name)) {
+                  participants.add(name);
+                }
+              }
+            });
+          }
+
+          // Also extract assignees from existing tasks in email notes
+          const assigneeMatches = content.matchAll(/\[\[@?([^\]]+)\]\]/g);
+          for (const match of assigneeMatches) {
+            const assignee = match[1].trim();
+            if (assignee !== 'Unassigned' &&
+                assignee.length < 50 &&
+                /^[a-zA-Z\s\-\.]+$/.test(assignee)) {
+              participants.add(assignee);
+            }
+          }
+        } catch (error) {
+          // Skip files that can't be read
+          continue;
+        }
+      }
+
+      // Sort alphabetically and cache
+      this.cachedParticipants = Array.from(participants).sort();
+      console.log('[TaskDashboard] Loaded participants:', this.cachedParticipants);
+      return this.cachedParticipants;
+    } catch (error) {
+      console.error('[TaskDashboard] Failed to load participants:', error);
+      return [];
+    }
+  }
+
   private applyDashboardStyles() {
     // The CSS will be added separately
+  }
+
+  private async clusterCurrentTasks() {
+    // Use all incomplete tasks for clustering
+    const displayTasks = this.allTasks.filter(t => !t.completed);
+
+    if (displayTasks.length < 2) {
+      new Notice('Need at least 2 tasks to cluster');
+      return;
+    }
+
+    // Initialize clusterer if needed
+    if (!this.taskClusterer && this.plugin?.settings?.anthropicApiKey) {
+      this.taskClusterer = new TaskClusterer(
+        this.plugin.settings.anthropicApiKey,
+        this.plugin.settings.claudeModel || 'claude-3-5-haiku-20241022'
+      );
+    }
+
+    if (!this.taskClusterer) {
+      new Notice('Claude API key required for clustering. Configure in settings.');
+      return;
+    }
+
+    try {
+      new Notice('🧩 Analyzing tasks for clustering...');
+      this.clusteringResult = await this.taskClusterer.clusterTasks(displayTasks);
+
+      // Save cluster IDs to task files
+      await this.saveClusterIds(this.clusteringResult);
+
+      new Notice(`✅ ${this.clusteringResult.summary}`);
+    } catch (error) {
+      console.error('Clustering failed:', error);
+      new Notice(`❌ Clustering failed: ${error.message}`);
+      this.clusteringResult = null;
+    }
+  }
+
+  private async saveClusterIds(result: ClusteringResult) {
+    try {
+      // Save cluster IDs to each task in the result
+      for (const cluster of result.clusters) {
+        for (const task of cluster.tasks) {
+          await this.addClusterIdToTask(task, cluster.id);
+        }
+      }
+
+      // Clear cluster IDs from standalone tasks
+      for (const task of result.standalone) {
+        if (task.clusterId) {
+          await this.removeClusterIdFromTask(task);
+        }
+      }
+
+      console.log('[Clustering] Saved cluster IDs to tasks');
+    } catch (error) {
+      console.error('[Clustering] Failed to save cluster IDs:', error);
+    }
+  }
+
+  private async addClusterIdToTask(task: Task, clusterId: string) {
+    try {
+      const content = await this.app.vault.read(task.file);
+      const lines = content.split('\n');
+      let line = lines[task.line];
+
+      // Check if already has cluster ID
+      if (line.includes('🧩 cluster:')) {
+        // Replace existing cluster ID
+        line = line.replace(/🧩\s*cluster:[a-z0-9-]+/g, `🧩 cluster:${clusterId}`);
+      } else {
+        // Add cluster ID at the end of the line
+        line = line.trimEnd() + ` 🧩 cluster:${clusterId}`;
+      }
+
+      lines[task.line] = line;
+      await this.app.vault.modify(task.file, lines.join('\n'));
+
+      // Update task object
+      task.clusterId = clusterId;
+    } catch (error) {
+      console.error(`[Clustering] Failed to add cluster ID to task:`, error);
+    }
+  }
+
+  private async removeClusterIdFromTask(task: Task) {
+    try {
+      const content = await this.app.vault.read(task.file);
+      const lines = content.split('\n');
+      let line = lines[task.line];
+
+      // Remove cluster ID
+      line = line.replace(/\s*🧩\s*cluster:[a-z0-9-]+/g, '');
+
+      lines[task.line] = line;
+      await this.app.vault.modify(task.file, lines.join('\n'));
+
+      // Update task object
+      task.clusterId = undefined;
+    } catch (error) {
+      console.error(`[Clustering] Failed to remove cluster ID from task:`, error);
+    }
+  }
+
+  private async displayClusteredTasks(container: HTMLElement) {
+    if (!this.clusteringResult) {
+      new Notice('No clustering results available');
+      return;
+    }
+
+    // Remove existing task sections
+    const taskSections = container.querySelectorAll('.task-section');
+    taskSections.forEach(section => section.remove());
+
+    // Display clusters
+    if (this.clusteringResult.clusters.length > 0) {
+      const clustersSection = container.createDiv('task-section clusters-section');
+      clustersSection.createEl('h2', {
+        text: `🧩 Task Clusters (${this.clusteringResult.clusters.length})`,
+        cls: 'clusters-header'
+      });
+
+      for (const cluster of this.clusteringResult.clusters) {
+        await this.createClusterCard(clustersSection, cluster);
+      }
+    }
+
+    // Display standalone tasks
+    if (this.clusteringResult.standalone.length > 0) {
+      const standaloneSection = container.createDiv('task-section standalone-section');
+      standaloneSection.createEl('h2', {
+        text: `📋 Standalone Tasks (${this.clusteringResult.standalone.length})`
+      });
+
+      await this.displayTasks(standaloneSection, this.clusteringResult.standalone);
+    }
+  }
+
+  private buildClusteringFromSavedIds(): ClusteringResult | null {
+    try {
+      // Group tasks by cluster ID
+      const clusterMap = new Map<string, Task[]>();
+      const standalone: Task[] = [];
+
+      for (const task of this.allTasks) {
+        if (task.completed) continue; // Skip completed tasks
+
+        if (task.clusterId) {
+          if (!clusterMap.has(task.clusterId)) {
+            clusterMap.set(task.clusterId, []);
+          }
+          clusterMap.get(task.clusterId)!.push(task);
+        } else {
+          standalone.push(task);
+        }
+      }
+
+      // Build clusters from the map
+      const clusters: TaskCluster[] = [];
+      for (const [clusterId, tasks] of clusterMap.entries()) {
+        if (tasks.length < 2) {
+          // Move single tasks to standalone
+          standalone.push(...tasks);
+          continue;
+        }
+
+        // Determine cluster priority (highest among tasks)
+        let priority: 'high' | 'medium' | 'low' = 'low';
+        for (const task of tasks) {
+          if (task.priority === 'high') {
+            priority = 'high';
+            break;
+          }
+          if (task.priority === 'medium' && priority === 'low') {
+            priority = 'medium';
+          }
+        }
+
+        // Create title from common words or first task
+        const title = this.generateClusterTitle(tasks);
+
+        clusters.push({
+          id: clusterId,
+          title,
+          description: `${tasks.length} related tasks`,
+          tasks,
+          priority,
+          confidence: 75 // Default confidence for loaded clusters
+        });
+      }
+
+      if (clusters.length === 0) {
+        return null;
+      }
+
+      return {
+        clusters,
+        standalone,
+        totalTasksAnalyzed: this.allTasks.filter(t => !t.completed).length,
+        clustersCreated: clusters.length,
+        summary: `Loaded ${clusters.length} saved clusters`
+      };
+    } catch (error) {
+      console.error('[Clustering] Failed to build clusters from saved IDs:', error);
+      return null;
+    }
+  }
+
+  private generateClusterTitle(tasks: Task[]): string {
+    // Simple title generation from first task or common words
+    if (tasks.length === 0) return 'Related Tasks';
+
+    const firstTask = tasks[0].text;
+    const words = firstTask.split(' ').filter(w => w.length > 3);
+
+    if (words.length > 0) {
+      return words.slice(0, 4).join(' ') + (words.length > 4 ? '...' : '');
+    }
+
+    return 'Related Tasks';
+  }
+
+  private applyFilterToClusters(filter: string) {
+    const clusterCards = this.containerEl.querySelectorAll('.cluster-card');
+    const standalone = this.containerEl.querySelector('.standalone-section');
+
+    clusterCards.forEach((card: Element) => {
+      if (!(card instanceof HTMLElement)) return;
+
+      const taskItems = card.querySelectorAll('.cluster-task-item');
+      let hasVisibleTasks = false;
+
+      taskItems.forEach((item: Element) => {
+        if (!(item instanceof HTMLElement)) return;
+
+        // Apply filter logic to each task
+        const show = this.shouldShowTaskInFilter(item, filter);
+        item.style.display = show ? 'list-item' : 'none';
+        if (show) hasVisibleTasks = true;
+      });
+
+      // Hide cluster card if no visible tasks
+      card.style.display = hasVisibleTasks ? 'block' : 'none';
+    });
+
+    // Apply filter to standalone section
+    if (standalone instanceof HTMLElement) {
+      this.applyFilter(filter);
+    }
+  }
+
+  private shouldShowTaskInFilter(taskElement: HTMLElement, filter: string): boolean {
+    switch(filter) {
+      case 'all':
+        return true;
+      case 'high':
+        return taskElement.closest('.cluster-card')?.classList.contains('high-card') || false;
+      case 'medium':
+        return taskElement.closest('.cluster-card')?.classList.contains('medium-card') || false;
+      case 'low':
+        return taskElement.closest('.cluster-card')?.classList.contains('low-card') || false;
+      case 'overdue':
+      case 'today':
+      case 'week':
+        const dueDateElem = taskElement.querySelector('.task-due');
+        if (!dueDateElem) return false;
+        const dateMatch = dueDateElem.textContent?.match(/\d{4}-\d{2}-\d{2}/);
+        if (!dateMatch) return false;
+
+        const dueDate = new Date(dateMatch[0]);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (filter === 'overdue') {
+          return dueDate < today;
+        } else if (filter === 'today') {
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          return dueDate >= today && dueDate < tomorrow;
+        } else if (filter === 'week') {
+          const weekFromNow = new Date(today);
+          weekFromNow.setDate(weekFromNow.getDate() + 7);
+          return dueDate >= today && dueDate <= weekFromNow;
+        }
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  private async createClusterCard(container: HTMLElement, cluster: TaskCluster) {
+    const card = container.createDiv(`cluster-card ${cluster.priority}-card`);
+
+    // Cluster header
+    const header = card.createDiv('cluster-header');
+
+    const titleRow = header.createDiv('cluster-title-row');
+    titleRow.createEl('h3', {
+      text: `${cluster.title} (${cluster.tasks.length} tasks)`,
+      cls: 'cluster-title'
+    });
+
+    // Confidence badge
+    const confidenceBadge = titleRow.createEl('span', {
+      text: `${cluster.confidence}%`,
+      cls: 'cluster-confidence'
+    });
+    if (cluster.confidence >= 80) {
+      confidenceBadge.addClass('high-confidence');
+    } else if (cluster.confidence >= 60) {
+      confidenceBadge.addClass('medium-confidence');
+    } else {
+      confidenceBadge.addClass('low-confidence');
+    }
+
+    // Description
+    header.createEl('p', {
+      text: cluster.description,
+      cls: 'cluster-description'
+    });
+
+    // Combined task suggestion if available
+    if (cluster.combinedTask) {
+      const suggestion = header.createDiv('cluster-suggestion');
+      suggestion.createEl('strong', { text: '💡 Suggested Combined Task:' });
+      suggestion.createEl('p', {
+        text: cluster.combinedTask,
+        cls: 'combined-task-text'
+      });
+
+      if (cluster.suggestedAssignee) {
+        suggestion.createEl('span', {
+          text: `→ ${cluster.suggestedAssignee}`,
+          cls: 'suggested-assignee'
+        });
+      }
+    }
+
+    // Task list
+    const taskList = card.createEl('ul', { cls: 'cluster-task-list' });
+
+    for (const task of cluster.tasks) {
+      const li = taskList.createEl('li', { cls: 'cluster-task-item' });
+
+      // Task text
+      const textSpan = li.createEl('span', {
+        text: task.text,
+        cls: 'task-text clickable'
+      });
+
+      textSpan.onclick = async () => {
+        const leaf = this.app.workspace.getLeaf(false);
+        await leaf.openFile(task.file);
+      };
+
+      // Metadata
+      const meta = li.createDiv('task-meta');
+      meta.createEl('span', {
+        text: `👤 ${task.assignee}`,
+        cls: 'task-assignee'
+      });
+
+      if (task.dueDate) {
+        meta.createEl('span', {
+          text: `📅 ${task.dueDate}`,
+          cls: 'task-due'
+        });
+      }
+
+      meta.createEl('span', {
+        text: `📄 ${task.file.basename}`,
+        cls: 'task-source'
+      });
+    }
   }
 }

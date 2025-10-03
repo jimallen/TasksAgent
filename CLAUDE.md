@@ -1,9 +1,13 @@
 # CLAUDE.md - TaskAgent Plugin
 
 ## Project Overview
-**Standalone Obsidian plugin** that fetches emails from Gmail via OAuth, extracts tasks using Claude AI, and creates organized notes with a visual task dashboard.
+**Standalone Obsidian plugin** that fetches emails from Gmail via OAuth, extracts tasks using Claude AI, creates organized notes with a visual task dashboard, and **automatically clusters similar tasks** for better organization.
 
-**Version 3.0** features a **dynamic, configurable label processor architecture** that supports unlimited email types through simple configuration.
+**Version 3.1** features:
+- **Dynamic, configurable label processor architecture** - supports unlimited email types
+- **AI-powered task clustering** - automatically groups similar/related tasks
+- **Persistent cluster storage** - cluster IDs saved in markdown task lines
+- **Parallel processing** - clustering runs alongside email import
 
 ## Architecture
 - **Standalone Plugin**: No external services or daemons required
@@ -15,10 +19,11 @@
 ## Key Files
 
 ### Source Code (`src/`)
-- `main.ts` - Plugin entry point and orchestrator
+- `main.ts` - Plugin entry point and orchestrator with auto-clustering
 - `gmailService.ts` - Gmail API with OAuth authentication & label-based search
 - `claudeExtractor.ts` - Claude AI task extraction (dual mode: meeting/actionitem)
-- `taskDashboard.ts` - Interactive task dashboard UI
+- `taskClusterer.ts` - **AI-powered task clustering and similarity detection**
+- `taskDashboard.ts` - Interactive task dashboard UI with cluster view
 - `oauthServer.ts` - Local OAuth callback handler
 - `emailProcessors/` - Dynamic processor architecture
   - `LabelProcessor.ts` - Configurable email processor
@@ -76,11 +81,23 @@ npm run clean        # Clean build artifacts
 - Fallback mode without AI
 
 ### Task Dashboard
+- **Cluster view** with grouped related tasks
+- **Auto-restore clustering** from persisted cluster IDs
+- **Manual clustering trigger** via button
+- **Combined task suggestions** from AI analysis
 - Priority sections (High/Medium/Low)
-- Interactive filtering and completion
+- Interactive filtering (works in clustered view)
 - "My Tasks" personalized view
 - Real-time statistics
 - Inline task editing
+
+### Task Clustering (NEW in v3.1)
+- **Automatic clustering** after email import (runs in parallel)
+- **Persistent storage** via `🧩 cluster:id` markers in task lines
+- **Smart grouping**: Identifies duplicates, similar tasks, related projects
+- **Combination recommendations**: Claude suggests merging tasks with confidence scores
+- **Filter integration**: All filters work in clustered view
+- **Manual control**: Re-cluster anytime via dashboard button
 
 ### Note Organization
 ```
@@ -97,10 +114,18 @@ TaskAgent/
 
 ## Task Format
 ```markdown
-- [ ] Task description [[@Assignee]] 📅 2024-12-29 ⚠️ 85% #tag
+- [ ] Task description [[@Assignee]] 📅 2024-12-29 🔴 🧩 cluster:abc123 ⚠️ 85% #tag
   - Context: Additional information
   > "Quote from email/transcript"
 ```
+
+**Metadata Markers:**
+- `[[@Assignee]]` - Task owner
+- `📅 2024-12-29` - Due date
+- `🔴` - Priority (🔴 high, 🟡 medium, 🟢 low)
+- `🧩 cluster:abc123` - **Cluster ID (persisted, enables auto-restore)**
+- `⚠️ 85%` - Confidence score
+- `#tag` - Category
 
 ## Note Format
 ```markdown
@@ -311,34 +336,94 @@ interface LabelProcessorConfig {
 - [ ] Update documentation
 - [ ] Create git tag
 
-## Recent Updates (v3.0)
+## Recent Updates (v3.1)
 
-### Dynamic Label Processor Architecture
+### AI-Powered Task Clustering (NEW)
+- **Automatic clustering** after email batch processing
+- **Persistent cluster storage** in markdown via `🧩 cluster:id` markers
+- **Auto-restore** clusters when dashboard loads
+- **Smart grouping**: Duplicate detection, similarity analysis, project grouping
+- **Combination suggestions**: Claude recommends merging related tasks
+- **Parallel processing**: Clustering runs in background during email import
+- **Filter integration**: All existing filters work in clustered view
+- **Manual control**: Dashboard button to re-cluster or show all tasks
+
+### v3.0 - Dynamic Label Processor Architecture
 - **Configuration-driven**: Add email types via settings
 - **No hardcoded labels**: All routing based on config
 - **Unlimited processors**: Support any number of email types
 - **Custom prompts**: Architecture ready for custom extraction prompts
 
-### Single Base Folder
+### v3.0 - Single Base Folder
 - All notes organized under `emailNotesFolder` (default: "TaskAgent")
 - Label-based subfolders (e.g., TaskAgent/Transcript/, TaskAgent/Action/)
 - Simplified caching and file tracking
 
-### Improved Gmail Integration
+### v3.0 - Improved Gmail Integration
 - Separate label searches for accurate tracking
 - Each email tagged with matched labels
 - Better pagination logging
 
-### Removed Migration Code
-- Clean install without backward compatibility overhead
-- Simplified settings structure
+## Clustering Implementation Details
+
+### How Clustering Works
+
+1. **Trigger**: After each email batch completes (3-5 emails)
+2. **Load**: Read all incomplete tasks from vault
+3. **Analyze**: Send to Claude with clustering prompt
+4. **Group**: Claude identifies similar/related tasks
+5. **Persist**: Save `🧩 cluster:id` to task lines in markdown
+6. **Restore**: Dashboard auto-loads clusters on startup
+
+### Clustering Prompt Logic
+
+Claude analyzes:
+- Task descriptions for keyword similarity
+- Task categories and tags
+- Assignees (but doesn't cluster just by assignee)
+- Priorities (clusters maintain highest priority)
+- Due dates (for related project detection)
+
+Claude provides:
+- **Cluster title**: Short descriptive name
+- **Cluster description**: Why tasks belong together
+- **Confidence score**: 0-100% certainty
+- **Combined task suggestion**: If tasks should be merged
+- **Suggested assignee**: Best owner for combined task
+
+### Persistence Architecture
+
+**Storage**: Inline in markdown (not separate database)
+```markdown
+- [ ] Review docs [[@John]] 📅 2025-01-20 🔴 🧩 cluster:abc123 #eng
+- [ ] Update docs [[@Sarah]] 📅 2025-01-21 🔴 🧩 cluster:abc123 #eng
+```
+
+**Benefits**:
+- ✅ Survives plugin reinstalls
+- ✅ Works with Obsidian sync
+- ✅ Version control friendly
+- ✅ Human readable
+- ✅ Manually editable
+
+### Code Locations
+
+- **Clustering logic**: `src/taskClusterer.ts`
+- **Auto-trigger**: `src/main.ts:625-629` (after batch completes)
+- **Persistence**: `src/main.ts:984-1019` (add/remove cluster IDs)
+- **Dashboard integration**: `src/taskDashboard.ts:225-233` (auto-restore)
+- **Cluster view**: `src/taskDashboard.ts:1820-1904` (cluster cards)
+- **Filter integration**: `src/taskDashboard.ts:2000-2066` (filter clusters)
 
 ## Future Enhancements
+- **Custom clustering prompts**: User-defined grouping logic
+- **Cluster templates**: Save and reuse configurations
+- **Cluster analytics**: Track cluster evolution over time
 - **Custom Prompt UI**: Visual editor for extraction templates
 - **Real-time monitoring**: WebSocket-based email watching
-- **Bulk operations**: Multi-task management
+- **Bulk operations**: Multi-task management across clusters
 - **Multi-vault sync**: Cross-device synchronization
-- **Analytics dashboard**: Productivity insights
+- **Analytics dashboard**: Productivity insights with cluster metrics
 - **Template engine**: Customizable note formats
 - **More prompt types**: Newsletter, calendar, report, etc.
 

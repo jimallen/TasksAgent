@@ -654,6 +654,133 @@
   border-width: 0;
 }/* Task Dashboard Styles */
 
+/* Cluster Cards */
+.cluster-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.cluster-card.high-card {
+  border-left: 4px solid var(--color-red);
+}
+
+.cluster-card.medium-card {
+  border-left: 4px solid var(--color-yellow);
+}
+
+.cluster-card.low-card {
+  border-left: 4px solid var(--color-green);
+}
+
+.cluster-header {
+  margin-bottom: 12px;
+}
+
+.cluster-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.cluster-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.cluster-confidence {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cluster-confidence.high-confidence {
+  background: rgba(76, 175, 80, 0.2);
+  color: var(--color-green);
+}
+
+.cluster-confidence.medium-confidence {
+  background: rgba(255, 193, 7, 0.2);
+  color: var(--color-yellow);
+}
+
+.cluster-confidence.low-confidence {
+  background: rgba(158, 158, 158, 0.2);
+  color: var(--text-muted);
+}
+
+.cluster-description {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.cluster-suggestion {
+  background: var(--background-primary-alt);
+  border-left: 3px solid var(--interactive-accent);
+  padding: 10px;
+  margin-top: 8px;
+  border-radius: 4px;
+}
+
+.cluster-suggestion strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--interactive-accent);
+}
+
+.combined-task-text {
+  margin: 6px 0;
+  font-size: 13px;
+  color: var(--text-normal);
+}
+
+.suggested-assignee {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cluster-task-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0 0;
+}
+
+.cluster-task-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.cluster-task-item:last-child {
+  border-bottom: none;
+}
+
+.clusters-section .task-section {
+  margin-top: 0;
+}
+
+.dashboard-cluster-btn {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.dashboard-cluster-btn:hover {
+  background: var(--interactive-accent-hover);
+}
+
+/* Task Dashboard Styles */
+
 .task-dashboard-view {
   padding: 20px;
   height: 100%;
@@ -1254,6 +1381,21 @@
   border: 1px solid rgba(251, 188, 5, 0.25);
 }
 
+.task-delegated-tag {
+  background: rgba(158, 106, 255, 0.15);
+  color: #bc8cff;
+  border: 1px solid rgba(158, 106, 255, 0.25);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.task-delegation {
+  background: rgba(158, 106, 255, 0.1);
+  color: #bc8cff;
+  border: 1px solid rgba(158, 106, 255, 0.2);
+}
+
 .task-source {
   background: rgba(139, 148, 158, 0.15);
   color: #a5b3c2;
@@ -1297,6 +1439,18 @@
   background: rgba(154, 103, 0, 0.12);
   color: #7d4e00;
   border: 1px solid rgba(154, 103, 0, 0.25);
+}
+
+.theme-light .task-delegated-tag {
+  background: rgba(102, 52, 204, 0.12);
+  color: #5e2ca5;
+  border: 1px solid rgba(102, 52, 204, 0.25);
+}
+
+.theme-light .task-delegation {
+  background: rgba(102, 52, 204, 0.08);
+  color: #5e2ca5;
+  border: 1px solid rgba(102, 52, 204, 0.2);
 }
 
 .theme-light .task-source {
@@ -1397,6 +1551,41 @@
   box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
 }
 
+.task-assignee-autocomplete {
+  position: absolute;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  margin-top: 2px;
+  min-width: 200px;
+}
+
+.autocomplete-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: 13px;
+  color: var(--text-normal);
+  transition: background 0.1s ease;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.autocomplete-item:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+}
+
+.task-edit-row {
+  position: relative;
+}
+
 .task-save-btn {
   padding: 4px 10px;
   border-radius: 4px;
@@ -1412,6 +1601,24 @@
 
 .task-save-btn:hover {
   background: var(--interactive-accent-hover);
+  transform: scale(1.05);
+}
+
+.task-cancel-btn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--background-modifier-error);
+  color: var(--text-on-accent);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.task-cancel-btn:hover {
+  background: var(--background-modifier-error-hover);
   transform: scale(1.05);
 }
 

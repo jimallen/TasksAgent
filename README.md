@@ -2,15 +2,16 @@
 
 > Automatically extract actionable tasks from Gmail meeting transcripts using Claude AI and create organized meeting notes in Obsidian.
 
-![Version](https://img.shields.io/badge/version-3.0.0-blue)
+![Version](https://img.shields.io/badge/version-3.1.0-blue)
 ![Obsidian](https://img.shields.io/badge/Obsidian-v0.15.0+-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## 🌟 Features
 
+- **🧩 AI Task Clustering** - Automatically groups similar/related tasks with persistent storage
 - **⚡ Dynamic Label Processing** - Add unlimited email types via configuration
 - **🤖 AI Task Extraction** - Claude intelligently extracts tasks, assignees, and priorities
-- **📊 Visual Dashboard** - Interactive task management with filtering
+- **📊 Visual Dashboard** - Interactive task management with cluster view and filtering
 - **📁 Smart Organization** - Automatic folder structure (TaskAgent/Label/YYYY/MM/)
 - **♻️ Email Reprocessing** - Update notes with improved extraction logic
 
@@ -65,8 +66,11 @@ The interactive script will find your Obsidian vaults and install the plugin aut
 - **Reprocess**: Click "🔄 Reprocess this email" link at bottom of any meeting note
 
 ### Task Dashboard
+- **Cluster view**: See grouped related tasks with AI-powered suggestions
+- **Auto-clustering**: Tasks are automatically clustered during email import
+- **Manual control**: Re-cluster or show all tasks via button toggle
 - View all tasks from meeting notes
-- Filter by priority, date, or assignee
+- Filter by priority, date, or assignee (filters work in clustered view)
 - Toggle "My Tasks" view
 - Click to complete tasks
 - Edit task details inline
@@ -84,8 +88,17 @@ npm run deploy     # Deploy to vault
 
 See [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md) for details.
 
-## ✨ What's New in v3.0
+## ✨ What's New in v3.1
 
+### AI-Powered Task Clustering
+- **Automatic clustering**: Runs in parallel during email import
+- **Smart grouping**: Identifies duplicates, similar tasks, and related projects
+- **Persistent storage**: Cluster IDs saved in task lines (`🧩 cluster:abc123`)
+- **Auto-restore**: Dashboard automatically rebuilds clusters from saved IDs
+- **Combination suggestions**: Claude recommends merging tasks with confidence scores
+- **Full filter support**: All filters work seamlessly in clustered view
+
+### v3.0 Features
 - Dynamic label processor architecture - add email types via configuration
 - Dual extraction modes for meetings vs action items
 - Single base folder with label subfolders
