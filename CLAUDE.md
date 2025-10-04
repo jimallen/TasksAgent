@@ -81,23 +81,25 @@ npm run clean        # Clean build artifacts
 - Fallback mode without AI
 
 ### Task Dashboard
-- **Cluster view** with grouped related tasks
-- **Auto-restore clustering** from persisted cluster IDs
-- **Manual clustering trigger** via button
+- **Instant view toggle** between task list and clustered view (no API calls)
+- **Auto-restore clustering** from persisted cluster IDs (shows normal view by default)
+- **Multi-filter support** - select multiple filters simultaneously (OR logic)
+- **Simplified filters**: 🔴 High, 🟡 Medium, ⏰ Past Due, 📅 This Week, 👥 Delegated, ✅ Done
+- **Filter persistence** across view toggles
+- **My Tasks only** - always shows assigned tasks (except delegated view)
 - **Combined task suggestions** from AI analysis
 - Priority sections (High/Medium/Low)
-- Interactive filtering (works in clustered view)
-- "My Tasks" personalized view
 - Real-time statistics
 - Inline task editing
 
-### Task Clustering (NEW in v3.1)
-- **Automatic clustering** after email import (runs in parallel)
+### Task Clustering (v3.1)
+- **Automatic clustering** after email import (runs in parallel with batch processing)
 - **Persistent storage** via `🧩 cluster:id` markers in task lines
+- **JSON auto-repair** for truncated Claude responses (missing braces/brackets)
 - **Smart grouping**: Identifies duplicates, similar tasks, related projects
 - **Combination recommendations**: Claude suggests merging tasks with confidence scores
-- **Filter integration**: All filters work in clustered view
-- **Manual control**: Re-cluster anytime via dashboard button
+- **Filter integration**: All filters work in both normal and clustered views
+- **Instant toggle**: Switch views without re-clustering
 
 ### Note Organization
 ```
@@ -176,8 +178,7 @@ interface MeetingTasksSettings {
   labelProcessors: LabelProcessorConfig[];
 
   // Dashboard
-  dashboardShowOnlyMyTasks: boolean;
-  dashboardMyName: string;
+  dashboardMyName: string;              // Always shows only your tasks (except delegated view)
 }
 
 interface LabelProcessorConfig {

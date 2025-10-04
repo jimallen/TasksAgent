@@ -66,12 +66,13 @@ The interactive script will find your Obsidian vaults and install the plugin aut
 - **Reprocess**: Click "🔄 Reprocess this email" link at bottom of any meeting note
 
 ### Task Dashboard
-- **Cluster view**: See grouped related tasks with AI-powered suggestions
+- **Instant view toggle**: Switch between task list and clustered view (no API calls)
+- **Multi-filter support**: Select multiple filters simultaneously (High + Past Due, etc.)
+- **Simplified filters**: 🔴 High, 🟡 Medium, ⏰ Past Due, 📅 This Week, 👥 Delegated, ✅ Done
+- **Filter persistence**: Active filters maintained when switching views
+- **My Tasks only**: Always shows only your assigned tasks (except delegated view)
 - **Auto-clustering**: Tasks are automatically clustered during email import
-- **Manual control**: Re-cluster or show all tasks via button toggle
-- View all tasks from meeting notes
-- Filter by priority, date, or assignee (filters work in clustered view)
-- Toggle "My Tasks" view
+- **Cluster view**: See grouped related tasks with AI-powered suggestions
 - Click to complete tasks
 - Edit task details inline
 
@@ -94,9 +95,17 @@ See [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md) for details.
 - **Automatic clustering**: Runs in parallel during email import
 - **Smart grouping**: Identifies duplicates, similar tasks, and related projects
 - **Persistent storage**: Cluster IDs saved in task lines (`🧩 cluster:abc123`)
-- **Auto-restore**: Dashboard automatically rebuilds clusters from saved IDs
+- **Auto-restore**: Dashboard automatically rebuilds clusters from saved IDs (shows normal view by default)
+- **Instant toggle**: Switch between views without re-clustering
+- **JSON auto-repair**: Automatically fixes truncated Claude responses
 - **Combination suggestions**: Claude recommends merging tasks with confidence scores
-- **Full filter support**: All filters work seamlessly in clustered view
+
+### Enhanced Dashboard UI
+- **Multi-filter support**: Select multiple filters (OR logic) - e.g., High + Past Due
+- **Simplified filters**: 6 essential filters with emojis for clarity
+- **Filter persistence**: Active filters maintained across view toggles
+- **My Tasks only**: Removed toggle - always shows your tasks (except delegated view)
+- **Instant view switching**: No API calls when toggling between list and cluster views
 
 ### v3.0 Features
 - Dynamic label processor architecture - add email types via configuration

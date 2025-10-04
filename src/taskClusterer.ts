@@ -166,9 +166,9 @@ Important:
               content: prompt
             }
           ],
-          max_tokens: 4000,
+          max_tokens: 8000,
           temperature: 0.2,
-          system: 'You are a task clustering assistant. Always respond with valid JSON only, no markdown or explanations.'
+          system: 'You are a task clustering assistant. Always respond with valid JSON only, no markdown or explanations. Ensure all strings are properly escaped and no trailing commas exist in arrays or objects.'
         })
       });
 
@@ -192,75 +192,163 @@ Important:
    */
   private parseClusteringResponse(response: string, originalTasks: Task[]): ClusteringResult {
     try {
-      // Extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      // Extract JSON from response - try multiple methods
+      let jsonStr = response.trim();
+
+      // Remove markdown code blocks if present
+      jsonStr = jsonStr.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '');
+
+      // Try to find JSON object
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('No JSON found in response');
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
-      const clusters: TaskCluster[] = [];
-      const usedIndices = new Set<number>();
+      jsonStr = jsonMatch[0];
 
-      // Build clusters
-      if (parsed.clusters && Array.isArray(parsed.clusters)) {
-        for (const clusterData of parsed.clusters) {
-          if (!clusterData.taskIndices || clusterData.taskIndices.length < 2) {
-            continue; // Skip invalid or single-task clusters
-          }
+      // Try to clean common JSON issues
+      // Remove trailing commas before closing braces/brackets
+      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
 
-          const clusterTasks: Task[] = [];
-          for (const idx of clusterData.taskIndices) {
-            if (idx >= 0 && idx < originalTasks.length && !usedIndices.has(idx)) {
-              clusterTasks.push(originalTasks[idx]);
-              usedIndices.add(idx);
+      // Fix unescaped quotes in strings (basic heuristic)
+      // This is a simple fix - matches quotes between other quotes on same line
+      jsonStr = jsonStr.replace(/"([^"]*)"([^"]*?)"/g, (match, p1, p2) => {
+        // If p2 contains unescaped quotes, try to escape them
+        if (p2.includes('"')) {
+          return `"${p1}${p2.replace(/"/g, '\\"')}"`;
+        }
+        return match;
+      });
+
+      // Log for debugging
+      console.debug('Attempting to parse JSON, length:', jsonStr.length);
+
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch (parseError: any) {
+        // Log the problematic area
+        const errorPos = parseError.message.match(/position (\d+)/)?.[1];
+        if (errorPos) {
+          const pos = parseInt(errorPos);
+          const start = Math.max(0, pos - 100);
+          const end = Math.min(jsonStr.length, pos + 100);
+          console.error('JSON parse error near:', jsonStr.substring(start, end));
+          console.error('Error position:', pos, 'Character:', jsonStr[pos]);
+          console.error('Last 200 chars:', jsonStr.substring(jsonStr.length - 200));
+
+          // Check if JSON is truncated (missing closing brackets)
+          const openBraces = (jsonStr.match(/\{/g) || []).length;
+          const closeBraces = (jsonStr.match(/\}/g) || []).length;
+          const openBrackets = (jsonStr.match(/\[/g) || []).length;
+          const closeBrackets = (jsonStr.match(/\]/g) || []).length;
+
+          console.error('Brace balance: { =', openBraces, '} =', closeBraces);
+          console.error('Bracket balance: [ =', openBrackets, '] =', closeBrackets);
+
+          // Try to auto-fix truncation
+          if (openBraces > closeBraces || openBrackets > closeBrackets) {
+            console.log('⚠️ JSON appears truncated, attempting to close structures');
+
+            // Smart closing: alternate between array and object closures
+            // This handles nested structures better
+            let fixedJson = jsonStr;
+            let braceDiff = openBraces - closeBraces;
+            let bracketDiff = openBrackets - closeBrackets;
+
+            // Close structures in reverse order (arrays inside objects, then objects)
+            while (braceDiff > 0 || bracketDiff > 0) {
+              if (bracketDiff > 0) {
+                fixedJson += ']';
+                bracketDiff--;
+              }
+              if (braceDiff > 0) {
+                fixedJson += '}';
+                braceDiff--;
+              }
+            }
+
+            console.log('Attempting to parse with closures added');
+            try {
+              parsed = JSON.parse(fixedJson);
+              console.log('✓ Successfully parsed with auto-fix!');
+              return this.buildClusteringResult(parsed, originalTasks);
+            } catch (retryError: any) {
+              console.error('Auto-fix failed:', retryError.message);
             }
           }
-
-          if (clusterTasks.length >= 2) {
-            clusters.push({
-              id: `cluster-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              title: clusterData.title || 'Related Tasks',
-              description: clusterData.description || 'Similar tasks',
-              tasks: clusterTasks,
-              priority: clusterData.priority || 'medium',
-              suggestedAssignee: clusterData.suggestedAssignee || undefined,
-              combinedTask: clusterData.combinedTask || undefined,
-              confidence: clusterData.confidence || 75
-            });
-          }
         }
+        throw parseError;
       }
-
-      // Build standalone tasks (tasks not in any cluster)
-      const standalone: Task[] = [];
-      if (parsed.standaloneIndices && Array.isArray(parsed.standaloneIndices)) {
-        for (const idx of parsed.standaloneIndices) {
-          if (idx >= 0 && idx < originalTasks.length && !usedIndices.has(idx)) {
-            standalone.push(originalTasks[idx]);
-            usedIndices.add(idx);
-          }
-        }
-      }
-
-      // Add any missed tasks to standalone
-      for (let i = 0; i < originalTasks.length; i++) {
-        if (!usedIndices.has(i)) {
-          standalone.push(originalTasks[i]);
-        }
-      }
-
-      return {
-        clusters,
-        standalone,
-        totalTasksAnalyzed: originalTasks.length,
-        clustersCreated: clusters.length,
-        summary: parsed.summary || `Found ${clusters.length} clusters from ${originalTasks.length} tasks`
-      };
+      return this.buildClusteringResult(parsed, originalTasks);
     } catch (error) {
       console.error('Failed to parse clustering response:', error);
       console.debug('Raw response:', response);
       throw error;
     }
+  }
+
+  /**
+   * Build clustering result from parsed JSON
+   */
+  private buildClusteringResult(parsed: any, originalTasks: Task[]): ClusteringResult {
+    const clusters: TaskCluster[] = [];
+    const usedIndices = new Set<number>();
+
+    // Build clusters
+    if (parsed.clusters && Array.isArray(parsed.clusters)) {
+      for (const clusterData of parsed.clusters) {
+        if (!clusterData.taskIndices || clusterData.taskIndices.length < 2) {
+          continue; // Skip invalid or single-task clusters
+        }
+
+        const clusterTasks: Task[] = [];
+        for (const idx of clusterData.taskIndices) {
+          if (idx >= 0 && idx < originalTasks.length && !usedIndices.has(idx)) {
+            clusterTasks.push(originalTasks[idx]);
+            usedIndices.add(idx);
+          }
+        }
+
+        if (clusterTasks.length >= 2) {
+          clusters.push({
+            id: `cluster-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            title: clusterData.title || 'Related Tasks',
+            description: clusterData.description || 'Similar tasks',
+            tasks: clusterTasks,
+            priority: clusterData.priority || 'medium',
+            suggestedAssignee: clusterData.suggestedAssignee || undefined,
+            combinedTask: clusterData.combinedTask || undefined,
+            confidence: clusterData.confidence || 75
+          });
+        }
+      }
+    }
+
+    // Build standalone tasks (tasks not in any cluster)
+    const standalone: Task[] = [];
+    if (parsed.standaloneIndices && Array.isArray(parsed.standaloneIndices)) {
+      for (const idx of parsed.standaloneIndices) {
+        if (idx >= 0 && idx < originalTasks.length && !usedIndices.has(idx)) {
+          standalone.push(originalTasks[idx]);
+          usedIndices.add(idx);
+        }
+      }
+    }
+
+    // Add any missed tasks to standalone
+    for (let i = 0; i < originalTasks.length; i++) {
+      if (!usedIndices.has(i)) {
+        standalone.push(originalTasks[i]);
+      }
+    }
+
+    return {
+      clusters,
+      standalone,
+      totalTasksAnalyzed: originalTasks.length,
+      clustersCreated: clusters.length,
+      summary: parsed.summary || `Found ${clusters.length} clusters from ${originalTasks.length} tasks`
+    };
   }
 }

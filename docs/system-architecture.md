@@ -149,11 +149,14 @@ graph TB
 - **Features**:
   - **Cluster view** with expandable groups
   - **Auto-restore** clustering from saved IDs
+  - **Instant toggle** between task list and clustered view (no API calls)
+  - **Multi-filter support** - select multiple filters simultaneously (OR logic)
+  - **Simplified filters**: High, Medium, Past Due, This Week, Delegated, Done
+  - **Filter persistence** - active filters maintained when switching views
   - Priority-based task organization
   - Interactive task completion
-  - Advanced filtering options (works in both normal and clustered views)
   - Real-time statistics
-  - My Tasks/All Tasks toggle
+  - **My Tasks only** - always shows only assigned tasks (except delegated view)
   - Next steps visualization with assignees
   - Combined task suggestions from Claude
 
@@ -552,12 +555,14 @@ graph TB
 
 1. **Automatic Clustering**: Runs in parallel after each email batch import
 2. **Persistent Storage**: Cluster IDs saved directly in markdown task lines
-3. **Auto-Restore**: Dashboard automatically rebuilds clusters from saved IDs
-4. **Smart Grouping**: Claude analyzes task descriptions, categories, assignees, priorities
-5. **Duplicate Detection**: Identifies similar or duplicate tasks
-6. **Combination Suggestions**: Recommends merging related tasks with confidence scores
-7. **Filter Integration**: All filters (priority, date, etc.) work in clustered view
-8. **Manual Control**: Users can manually trigger re-clustering or clear clusters
+3. **Auto-Restore**: Dashboard automatically rebuilds clusters from saved IDs (but shows normal view by default)
+4. **Instant Toggle**: Switch between clustered and normal view without API calls
+5. **Smart Grouping**: Claude analyzes task descriptions, categories, assignees, priorities
+6. **Duplicate Detection**: Identifies similar or duplicate tasks
+7. **Combination Suggestions**: Recommends merging related tasks with confidence scores
+8. **Filter Integration**: All filters (priority, date, etc.) work in clustered view
+9. **Multi-Filter Support**: Apply multiple filters simultaneously with OR logic
+10. **JSON Auto-Repair**: Automatically fixes truncated Claude responses (missing braces/brackets)
 
 ## Future Architecture Considerations
 

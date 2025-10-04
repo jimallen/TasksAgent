@@ -58,7 +58,6 @@ interface MeetingTasksPlugin {
 export class TaskDashboardView extends ItemView {
   private component: Component;
   private plugin: MeetingTasksPlugin | undefined;
-  private showOnlyMyTasks: boolean = true;
   private allTasks: Task[] = [];
   private isLoading: boolean = false;
   private filterCounts: FilterCounts | null = null;
@@ -73,7 +72,6 @@ export class TaskDashboardView extends ItemView {
     super(leaf);
     this.component = new Component();
     this.plugin = plugin;
-    this.showOnlyMyTasks = true;
   }
 
   getViewType() {
@@ -149,6 +147,7 @@ export class TaskDashboardView extends ItemView {
   }
   
   private currentFilter: string = 'all';
+  private activeFilters: Set<string> = new Set();
 
   private async loadAndDisplayDashboard(container: HTMLElement) {
     // Clear loading state
@@ -161,40 +160,45 @@ export class TaskDashboardView extends ItemView {
     // Add control buttons
     const controls = header.createDiv('dashboard-controls');
 
-    // Add toggle button for my tasks/all tasks (only if user name is configured)
-    if (this.plugin?.settings?.dashboardMyName) {
-      const toggleBtn = controls.createEl('button', {
-        text: this.showOnlyMyTasks ? '👥 Show All Tasks' : '👤 Show My Tasks',
-        cls: 'dashboard-control-btn dashboard-toggle-btn'
-      });
-
-      toggleBtn.onclick = () => {
-        this.showOnlyMyTasks = !this.showOnlyMyTasks;
-        toggleBtn.textContent = this.showOnlyMyTasks ? '👥 Show All Tasks' : '👤 Show My Tasks';
-        this.updateFilterCounts(true); // Update counts for new view mode (immediate)
-        this.updateTaskDisplay();
-      };
-    }
-
     // Add cluster button
     const clusterBtn = controls.createEl('button', {
-      text: this.showClustered ? '📋 Show All Tasks' : '🧩 Cluster Similar Tasks',
+      text: this.showClustered ? '📋 Show Task List' : '🧩 Show Clustered View',
       cls: 'dashboard-control-btn dashboard-cluster-btn'
     });
 
     clusterBtn.onclick = async () => {
+      console.log('[ClusterBtn] Clicked. Current showClustered:', this.showClustered);
+
+      // Clear existing task sections
+      const taskSections = container.querySelectorAll('.task-section');
+      taskSections.forEach(section => section.remove());
+
       if (!this.showClustered) {
-        // Cluster tasks
-        await this.clusterCurrentTasks();
+        // Switch to clustered view
         this.showClustered = true;
-        clusterBtn.textContent = '📋 Show All Tasks';
+        clusterBtn.textContent = '📋 Show Task List';
+        console.log('[ClusterBtn] Switching to clustered view');
+
         await this.displayClusteredTasks(container);
+
+        // Re-apply active filters to clustered view
+        if (this.activeFilters.size > 0) {
+          this.applyMultipleFiltersToClusters();
+        }
       } else {
-        // Show normal view
+        // Switch to normal view
         this.showClustered = false;
-        this.clusteringResult = null;
-        clusterBtn.textContent = '🧩 Cluster Similar Tasks';
-        await this.refresh();
+        clusterBtn.textContent = '🧩 Show Clustered View';
+        console.log('[ClusterBtn] Switching to task list view');
+
+        // Display normal task list
+        const displayTasks = this.currentFilter === 'delegated' ? this.allTasks : this.getFilteredTasks();
+        await this.displayTasks(container, displayTasks);
+
+        // Re-apply active filters to normal view
+        if (this.activeFilters.size > 0) {
+          this.applyMultipleFilters();
+        }
       }
     };
 
@@ -222,15 +226,19 @@ export class TaskDashboardView extends ItemView {
       this.isLoading = false;
     }
 
-    // Check if we should auto-restore clustered view from saved cluster IDs
+    // Load clusters from saved IDs (but keep current view state)
     const hasClusters = this.allTasks.some(t => t.clusterId);
     if (hasClusters && !this.clusteringResult) {
       this.clusteringResult = this.buildClusteringFromSavedIds();
-      if (this.clusteringResult && this.clusteringResult.clusters.length > 0) {
-        this.showClustered = true;
-        clusterBtn.textContent = '📋 Show All Tasks';
-      }
+      console.log('[Dashboard] Loaded', this.clusteringResult?.clusters.length || 0, 'clusters from saved IDs');
     }
+
+    // Update button text based on current state
+    if (this.showClustered) {
+      clusterBtn.textContent = '📋 Show Task List';
+    }
+
+    console.log('[Dashboard] Current state: showClustered =', this.showClustered);
 
     // Update filter counts after loading tasks (immediate update)
     this.updateFilterCounts(true);
@@ -239,15 +247,28 @@ export class TaskDashboardView extends ItemView {
     // Delegated filter always uses all tasks, regardless of "My Tasks" toggle
     const displayTasks = this.currentFilter === 'delegated' ? this.allTasks : this.getFilteredTasks();
 
+    console.log('[Dashboard] Render state:', {
+      showClustered: this.showClustered,
+      hasClusteringResult: !!this.clusteringResult,
+      currentFilter: this.currentFilter,
+      allTasksCount: this.allTasks.length,
+      displayTasksCount: displayTasks.length
+    });
+
     // Create task sections - either clustered or normal view
     if (this.showClustered && this.clusteringResult) {
       await this.displayClusteredTasks(container);
-      // Re-apply current filter to clustered view
-      if (this.currentFilter !== 'all') {
-        this.applyFilterToClusters(this.currentFilter);
+      // Re-apply active filters to clustered view
+      if (this.activeFilters.size > 0) {
+        this.applyMultipleFiltersToClusters();
       }
     } else {
+      console.log('[Dashboard] Calling displayTasks with', displayTasks.length, 'tasks');
       await this.displayTasks(container, displayTasks);
+      // Re-apply active filters to normal view
+      if (this.activeFilters.size > 0) {
+        this.applyMultipleFilters();
+      }
     }
 
     // Apply custom CSS
@@ -279,14 +300,12 @@ export class TaskDashboardView extends ItemView {
     this.filterCounts = counts; // Cache the counts
     
     const filters = [
-      { label: 'High Priority', filter: 'high', active: true, dataAttr: 'high', count: counts.high },
-      { label: 'Medium Priority', filter: 'medium', dataAttr: 'medium', count: counts.medium },
-      { label: 'Low Priority', filter: 'low', dataAttr: 'low', count: counts.low },
-      { label: 'Past Due', filter: 'overdue', dataAttr: 'overdue', count: counts.overdue },
-      { label: 'Due Today', filter: 'today', dataAttr: 'due-today', count: counts.today },
-      { label: 'Due This Week', filter: 'week', dataAttr: 'due-week', count: counts.week },
-      { label: 'Delegated', filter: 'delegated', dataAttr: 'delegated', count: counts.delegated },
-      { label: 'Completed', filter: 'completed', dataAttr: 'completed', count: counts.completed }
+      { label: '🔴 High', filter: 'high', active: false, dataAttr: 'high', count: counts.high },
+      { label: '🟡 Medium', filter: 'medium', active: false, dataAttr: 'medium', count: counts.medium },
+      { label: '⏰ Past Due', filter: 'overdue', dataAttr: 'overdue', count: counts.overdue },
+      { label: '📅 This Week', filter: 'week', dataAttr: 'due-week', count: counts.week },
+      { label: '👥 Delegated', filter: 'delegated', dataAttr: 'delegated', count: counts.delegated },
+      { label: '✅ Done', filter: 'completed', dataAttr: 'completed', count: counts.completed }
     ];
     
     filters.forEach(f => {
@@ -310,27 +329,28 @@ export class TaskDashboardView extends ItemView {
       }
       
       btn.onclick = () => {
-        // Toggle filter - click active button to show all
+        // Toggle filter in/out of active set
         if (btn.hasClass('active')) {
           btn.removeClass('active');
-          this.currentFilter = 'all';
-          this.applyFilter('all');
+          this.activeFilters.delete(f.filter);
         } else {
-          // Remove active from all buttons
-          filterGroup.querySelectorAll('.filter-btn').forEach(b => {
-            if (b instanceof HTMLElement) {
-              b.removeClass('active');
-            }
-          });
           btn.addClass('active');
-          this.currentFilter = f.filter;
+          this.activeFilters.add(f.filter);
+        }
 
-          // If delegated filter, reload with all tasks
-          if (f.filter === 'delegated') {
-            this.updateTaskDisplay();
-          } else {
-            this.applyFilter(f.filter);
-          }
+        console.log('[Filter] Active filters:', Array.from(this.activeFilters));
+
+        // Update currentFilter for backward compatibility
+        this.currentFilter = this.activeFilters.size === 0 ? 'all' : Array.from(this.activeFilters)[0];
+
+        // Apply filters to current view
+        if (this.activeFilters.has('delegated') && this.activeFilters.size === 1) {
+          // Special case: delegated only
+          this.updateTaskDisplay();
+        } else if (this.showClustered) {
+          this.applyMultipleFiltersToClusters();
+        } else {
+          this.applyMultipleFilters();
         }
       };
     });
@@ -458,24 +478,43 @@ export class TaskDashboardView extends ItemView {
   }
 
   private async displayTasks(container: HTMLElement, tasks: Task[]) {
+    console.log('[displayTasks] Called with', tasks.length, 'tasks');
+
+    // Clear existing task sections first
+    const taskSections = container.querySelectorAll('.task-section');
+    console.log('[displayTasks] Clearing', taskSections.length, 'existing sections');
+    taskSections.forEach(section => section.remove());
+
     // Group tasks by priority
     const highPriority = tasks.filter(t => t.priority === 'high' && !t.completed);
     const mediumPriority = tasks.filter(t => t.priority === 'medium' && !t.completed);
     const lowPriority = tasks.filter(t => t.priority === 'low' && !t.completed);
     const completedTasks = tasks.filter(t => t.completed);
+
+    console.log('[displayTasks] Grouped:', {
+      high: highPriority.length,
+      medium: mediumPriority.length,
+      low: lowPriority.length,
+      completed: completedTasks.length
+    });
     
     // Create sections
     if (highPriority.length > 0) {
+      console.log('[displayTasks] Creating high priority section with', highPriority.length, 'tasks');
       await this.createTaskSection(container, '🔴 High Priority', highPriority, 'high');
     }
-    
+
     if (mediumPriority.length > 0) {
+      console.log('[displayTasks] Creating medium priority section with', mediumPriority.length, 'tasks');
       await this.createTaskSection(container, '🟡 Medium Priority', mediumPriority, 'medium');
     }
-    
+
     if (lowPriority.length > 0) {
+      console.log('[displayTasks] Creating low priority section with', lowPriority.length, 'tasks');
       await this.createTaskSection(container, '🟢 Low Priority', lowPriority, 'low');
     }
+
+    console.log('[displayTasks] Finished creating sections');
     
     // Completed section (collapsed by default)
     if (completedTasks.length > 0) {
@@ -1330,7 +1369,144 @@ export class TaskDashboardView extends ItemView {
       section.style.display = sectionHasVisibleCards ? 'block' : 'none';
     });
   }
-  
+
+  private applyMultipleFilters() {
+    const sections = this.containerEl.querySelectorAll('.task-section');
+
+    // If no filters active, show all
+    if (this.activeFilters.size === 0) {
+      sections.forEach((section: Element) => {
+        if (section instanceof HTMLElement) {
+          section.style.display = 'block';
+          const cards = section.querySelectorAll('.task-card');
+          cards.forEach((card: Element) => {
+            if (card instanceof HTMLElement) {
+              card.style.display = 'block';
+            }
+          });
+        }
+      });
+      return;
+    }
+
+    sections.forEach((section: Element) => {
+      if (!(section instanceof HTMLElement)) return;
+      const cards = section.querySelectorAll('.task-card');
+      let sectionHasVisibleCards = false;
+
+      cards.forEach((card: Element) => {
+        if (!(card instanceof HTMLElement)) return;
+
+        // Card passes if it matches ANY of the active filters (OR logic)
+        let show = false;
+
+        for (const filter of this.activeFilters) {
+          let matches = false;
+
+          switch(filter) {
+            case 'high':
+              matches = card.hasClass('high-card');
+              break;
+            case 'medium':
+              matches = card.hasClass('medium-card');
+              break;
+            case 'low':
+              matches = card.hasClass('low-card');
+              break;
+            case 'completed':
+              matches = card.hasClass('completed-card');
+              break;
+            case 'overdue':
+              matches = this.hasTasksOverdue(card);
+              break;
+            case 'today':
+              matches = this.hasTasksDueToday(card);
+              break;
+            case 'week':
+              matches = this.hasTasksDueThisWeek(card);
+              break;
+            case 'delegated':
+              matches = this.hasDelegatedTasks(card);
+              break;
+          }
+
+          if (matches) {
+            show = true;
+            break; // Found a match, no need to check other filters
+          }
+        }
+
+        card.style.display = show ? 'block' : 'none';
+        if (show) sectionHasVisibleCards = true;
+      });
+
+      // Hide section if no cards are visible
+      section.style.display = sectionHasVisibleCards ? 'block' : 'none';
+    });
+  }
+
+  private applyMultipleFiltersToClusters() {
+    const clusterCards = this.containerEl.querySelectorAll('.cluster-card');
+    const standaloneSections = this.containerEl.querySelectorAll('.standalone-section .task-card');
+
+    // If no filters active, show all
+    if (this.activeFilters.size === 0) {
+      clusterCards.forEach((card: Element) => {
+        if (card instanceof HTMLElement) card.style.display = 'block';
+      });
+      standaloneSections.forEach((card: Element) => {
+        if (card instanceof HTMLElement) card.style.display = 'block';
+      });
+      return;
+    }
+
+    // Apply filters to cluster cards and standalone tasks
+    const allCards = Array.from(clusterCards).concat(Array.from(standaloneSections));
+    allCards.forEach((card: Element) => {
+      if (!(card instanceof HTMLElement)) return;
+
+      let show = false;
+
+      for (const filter of this.activeFilters) {
+        let matches = false;
+
+        switch(filter) {
+          case 'high':
+            matches = card.hasClass('high-card');
+            break;
+          case 'medium':
+            matches = card.hasClass('medium-card');
+            break;
+          case 'low':
+            matches = card.hasClass('low-card');
+            break;
+          case 'completed':
+            matches = card.hasClass('completed-card');
+            break;
+          case 'overdue':
+            matches = this.hasTasksOverdue(card);
+            break;
+          case 'today':
+            matches = this.hasTasksDueToday(card);
+            break;
+          case 'week':
+            matches = this.hasTasksDueThisWeek(card);
+            break;
+          case 'delegated':
+            matches = this.hasDelegatedTasks(card);
+            break;
+        }
+
+        if (matches) {
+          show = true;
+          break;
+        }
+      }
+
+      card.style.display = show ? 'block' : 'none';
+    });
+  }
+
   private hasTasksDueToday(card: HTMLElement): boolean {
     // Check if this is a completed card - never show completed cards for date filters
     if (card.classList.contains('completed-card')) {
@@ -1491,21 +1667,22 @@ export class TaskDashboardView extends ItemView {
   }
 
   private getFilteredTasks(): Task[] {
-    if (this.showOnlyMyTasks && this.plugin?.settings?.dashboardMyName) {
+    // Always filter to my tasks if name is configured
+    if (this.plugin?.settings?.dashboardMyName) {
       // Support comma-separated list of names
       const myNames = this.plugin.settings.dashboardMyName
         .split(',')
         .map(name => name.toLowerCase().trim())
         .filter(name => name.length > 0);
-      
+
       if (myNames.length === 0) {
         return this.allTasks;
       }
-      
+
       return this.allTasks.filter(t => {
         const assignee = t.assignee.toLowerCase().trim();
         // Check if assignee matches any of the names
-        return myNames.some(name => 
+        return myNames.some(name =>
           assignee === name || assignee.includes(name)
         );
       });
@@ -1880,8 +2057,13 @@ export class TaskDashboardView extends ItemView {
   }
 
   private async displayClusteredTasks(container: HTMLElement) {
+    // Build clusters from saved cluster IDs in tasks
     if (!this.clusteringResult) {
-      new Notice('No clustering results available');
+      this.clusteringResult = this.buildClusteringFromSavedIds();
+    }
+
+    if (!this.clusteringResult) {
+      new Notice('No clusters found. Process some emails first to create clusters.');
       return;
     }
 
