@@ -4,11 +4,88 @@ import {
   TFile,
   Notice,
   MarkdownRenderer,
-  Component
+  Component,
+  Modal,
+  App
 } from 'obsidian';
 import { TaskClusterer, TaskCluster, ClusteringResult } from './taskClusterer';
 
 export const TASK_DASHBOARD_VIEW_TYPE = 'task-dashboard-view';
+
+class ClusterTitleModal extends Modal {
+  private currentTitle: string;
+  private onSubmit: (newTitle: string) => void;
+
+  constructor(app: App, currentTitle: string, onSubmit: (newTitle: string) => void) {
+    super(app);
+    this.currentTitle = currentTitle;
+    this.onSubmit = onSubmit;
+  }
+
+  onOpen() {
+    const { contentEl, titleEl } = this;
+
+    titleEl.setText('Edit Cluster Title');
+    contentEl.empty();
+
+    contentEl.createEl('p', {
+      text: 'Enter a new title for this cluster:'
+    });
+
+    const input = contentEl.createEl('input', {
+      type: 'text',
+      value: this.currentTitle
+    });
+    input.style.width = '100%';
+    input.style.padding = '8px';
+    input.style.marginBottom = '16px';
+
+    const buttonContainer = contentEl.createDiv();
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.gap = '8px';
+    buttonContainer.style.justifyContent = 'flex-end';
+
+    const saveBtn = buttonContainer.createEl('button', {
+      text: 'Save',
+      cls: 'mod-cta'
+    });
+
+    const cancelBtn = buttonContainer.createEl('button', {
+      text: 'Cancel'
+    });
+
+    saveBtn.onclick = () => {
+      const newTitle = input.value.trim();
+      if (newTitle) {
+        this.onSubmit(newTitle);
+      }
+      this.close();
+    };
+
+    cancelBtn.onclick = () => {
+      this.close();
+    };
+
+    // Submit on Enter
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        saveBtn.click();
+      } else if (e.key === 'Escape') {
+        cancelBtn.click();
+      }
+    });
+
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 50);
+  }
+
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+}
 
 interface Task {
   text: string;
@@ -67,6 +144,8 @@ export class TaskDashboardView extends ItemView {
   private taskClusterer: TaskClusterer | null = null;
   private clusteringResult: ClusteringResult | null = null;
   private showClustered: boolean = false;
+  private clusterToggleBtn: HTMLElement | null = null;
+  private customClusterTitles: Map<string, string> = new Map(); // clusterId -> custom title
 
   constructor(leaf: WorkspaceLeaf, plugin?: MeetingTasksPlugin) {
     super(leaf);
@@ -161,12 +240,13 @@ export class TaskDashboardView extends ItemView {
     const controls = header.createDiv('dashboard-controls');
 
     // Add cluster button
-    const clusterBtn = controls.createEl('button', {
+    this.clusterToggleBtn = controls.createEl('button', {
       text: this.showClustered ? '📋 Show Task List' : '🧩 Show Clustered View',
       cls: 'dashboard-control-btn dashboard-cluster-btn'
     });
 
-    clusterBtn.onclick = async () => {
+    this.clusterToggleBtn.onclick = async () => {
+      const clusterBtn = this.clusterToggleBtn!;
       console.log('[ClusterBtn] Clicked. Current showClustered:', this.showClustered);
 
       // Clear existing task sections
@@ -210,6 +290,110 @@ export class TaskDashboardView extends ItemView {
 
     refreshBtn.onclick = () => this.refresh();
 
+    // Add re-cluster button with dropdown
+    const reclusterContainer = controls.createDiv('recluster-btn-container');
+
+    const reclusterBtn = reclusterContainer.createEl('button', {
+      text: '🧩 Re-cluster Tasks',
+      cls: 'dashboard-control-btn recluster-main-btn',
+      title: 'Cluster tasks'
+    });
+
+    const dropdownBtn = reclusterContainer.createEl('button', {
+      text: '▼',
+      cls: 'dashboard-control-btn recluster-dropdown-btn',
+      title: 'Choose clustering mode'
+    });
+
+    // Create dropdown menu
+    const dropdownMenu = reclusterContainer.createDiv('recluster-dropdown-menu');
+    dropdownMenu.style.display = 'none';
+
+    const smartOption = dropdownMenu.createDiv('dropdown-option');
+    smartOption.createEl('div', {
+      text: '🧩 Smart Re-cluster',
+      cls: 'option-title'
+    });
+    smartOption.createEl('div', {
+      text: 'Cluster only new tasks (preserves existing clusters)',
+      cls: 'option-description'
+    });
+
+    const forceOption = dropdownMenu.createDiv('dropdown-option');
+    forceOption.createEl('div', {
+      text: '🔧 Force Re-cluster',
+      cls: 'option-title'
+    });
+    forceOption.createEl('div', {
+      text: 'Re-analyze ALL tasks (creates fresh clusters)',
+      cls: 'option-description'
+    });
+
+    // Handle clustering logic
+    const handleRecluster = async (forceMode: boolean) => {
+      await this.clusterCurrentTasks(forceMode);
+
+      // Reload tasks from disk to get updated cluster IDs
+      console.log('[Re-cluster] Reloading tasks from disk...');
+      this.allTasks = await this.loadTasks();
+
+      // Force rebuild clustering from saved IDs
+      this.clusteringResult = null;
+      this.clusteringResult = this.buildClusteringFromSavedIds();
+
+      console.log('[Re-cluster] Clustering result:', this.clusteringResult);
+
+      // Refresh to show new clusters
+      if (this.showClustered) {
+        const taskSections = container.querySelectorAll('.task-section');
+        taskSections.forEach(section => section.remove());
+        await this.displayClusteredTasks(container);
+        if (this.activeFilters.size > 0) {
+          this.applyMultipleFiltersToClusters();
+        }
+      } else {
+        // If in normal view, offer to switch to cluster view
+        if (this.clusteringResult && this.clusteringResult.clusters.length > 0) {
+          const msg = forceMode
+            ? `✅ Created ${this.clusteringResult.clusters.length} fresh clusters.`
+            : `✅ Clustered new tasks.`;
+          new Notice(`${msg} Click "Show Clustered View" to see them.`);
+        }
+      }
+    };
+
+    // Main button does smart re-cluster by default
+    reclusterBtn.onclick = async () => {
+      dropdownMenu.style.display = 'none';
+      await handleRecluster(false);
+    };
+
+    // Dropdown button toggles menu
+    dropdownBtn.onclick = (e) => {
+      e.stopPropagation();
+      const isVisible = dropdownMenu.style.display === 'block';
+      dropdownMenu.style.display = isVisible ? 'none' : 'block';
+    };
+
+    // Smart option
+    smartOption.onclick = async () => {
+      dropdownMenu.style.display = 'none';
+      await handleRecluster(false);
+    };
+
+    // Force option
+    forceOption.onclick = async () => {
+      dropdownMenu.style.display = 'none';
+      await handleRecluster(true);
+    };
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!reclusterContainer.contains(e.target as Node)) {
+        dropdownMenu.style.display = 'none';
+      }
+    });
+
     // Add filter buttons
     const filters = container.createDiv('dashboard-filters');
     this.createFilterButtons(filters);
@@ -218,6 +402,9 @@ export class TaskDashboardView extends ItemView {
     try {
       this.isLoading = true;
       this.allTasks = await this.loadTasks();
+
+      // Load custom cluster titles
+      await this.loadCustomClusterTitles();
     } catch (error) {
       console.error('Failed to load tasks:', error);
       new Notice('Failed to load tasks. Check console for details.');
@@ -234,8 +421,8 @@ export class TaskDashboardView extends ItemView {
     }
 
     // Update button text based on current state
-    if (this.showClustered) {
-      clusterBtn.textContent = '📋 Show Task List';
+    if (this.showClustered && this.clusterToggleBtn) {
+      this.clusterToggleBtn.textContent = '📋 Show Task List';
     }
 
     console.log('[Dashboard] Current state: showClustered =', this.showClustered);
@@ -1953,13 +2140,34 @@ export class TaskDashboardView extends ItemView {
     // The CSS will be added separately
   }
 
-  private async clusterCurrentTasks() {
-    // Use all incomplete tasks for clustering
-    const displayTasks = this.allTasks.filter(t => !t.completed);
+  private async clusterCurrentTasks(forceReclustering: boolean = false) {
+    // Use filtered tasks (respects "My Tasks" setting) for clustering
+    const myTasks = this.getFilteredTasks();
+    let displayTasks = myTasks.filter(t => !t.completed);
 
-    if (displayTasks.length < 2) {
-      new Notice('Need at least 2 tasks to cluster');
-      return;
+    console.log('[Clustering] Starting clustering...');
+    console.log('[Clustering] Force mode:', forceReclustering);
+    console.log('[Clustering] My tasks count:', myTasks.length);
+    console.log('[Clustering] Incomplete tasks:', displayTasks.length);
+
+    // Smart mode: only cluster tasks without cluster IDs
+    if (!forceReclustering) {
+      const unclusteredTasks = displayTasks.filter(t => !t.clusterId);
+      console.log('[Clustering] Smart mode - unclustered tasks:', unclusteredTasks.length);
+
+      if (unclusteredTasks.length < 2) {
+        new Notice('No new tasks to cluster. All tasks are already clustered or there are fewer than 2 new tasks.');
+        return;
+      }
+
+      displayTasks = unclusteredTasks;
+    } else {
+      console.log('[Clustering] Force mode - clustering all tasks');
+
+      if (displayTasks.length < 2) {
+        new Notice('Need at least 2 incomplete tasks to cluster');
+        return;
+      }
     }
 
     // Initialize clusterer if needed
@@ -1976,34 +2184,76 @@ export class TaskDashboardView extends ItemView {
     }
 
     try {
-      new Notice('🧩 Analyzing tasks for clustering...');
-      this.clusteringResult = await this.taskClusterer.clusterTasks(displayTasks);
+      const mode = forceReclustering ? 'Force' : 'Smart';
 
-      // Save cluster IDs to task files
-      await this.saveClusterIds(this.clusteringResult);
+      // Step 1: Loading
+      new Notice(`🧩 ${mode} Re-clustering: Loading ${displayTasks.length} tasks...`);
+      console.log('[Clustering] Calling taskClusterer.clusterTasks()...');
 
-      new Notice(`✅ ${this.clusteringResult.summary}`);
+      // Progress callback
+      const onProgress = (message: string) => {
+        new Notice(`🔍 ${mode} Re-clustering: ${message}`);
+      };
+
+      this.clusteringResult = await this.taskClusterer.clusterTasks(
+        displayTasks,
+        this.app.vault,
+        onProgress
+      );
+
+      console.log('[Clustering] Clustering complete. Result:', this.clusteringResult);
+      console.log('[Clustering] Clusters created:', this.clusteringResult?.clusters.length || 0);
+      console.log('[Clustering] Standalone tasks:', this.clusteringResult?.standalone.length || 0);
+
+      // Step 3: Saving
+      new Notice(`💾 ${mode} Re-clustering: Saving ${this.clusteringResult.clusters.length} clusters to files...`);
+      await this.saveClusterIds(this.clusteringResult, forceReclustering);
+
+      // Step 4: Complete
+      new Notice(`✅ ${mode} Re-clustering complete!\n📦 ${this.clusteringResult.clusters.length} clusters created\n📋 ${this.clusteringResult.standalone.length} standalone tasks`, 6000);
     } catch (error) {
-      console.error('Clustering failed:', error);
-      new Notice(`❌ Clustering failed: ${error.message}`);
+      console.error('[Clustering] Clustering failed:', error);
+      new Notice(`❌ Clustering failed: ${error.message}`, 8000);
       this.clusteringResult = null;
     }
   }
 
-  private async saveClusterIds(result: ClusteringResult) {
+  private async saveClusterIds(result: ClusteringResult, forceMode: boolean = false) {
     try {
+      let savedCount = 0;
+      const totalTasks = result.clusters.reduce((sum, c) => sum + c.tasks.length, 0);
+
       // Save cluster IDs to each task in the result
       for (const cluster of result.clusters) {
         for (const task of cluster.tasks) {
           await this.addClusterIdToTask(task, cluster.id);
+          savedCount++;
+
+          // Show progress every 10 tasks
+          if (savedCount % 10 === 0) {
+            new Notice(`💾 Saving cluster IDs: ${savedCount}/${totalTasks} tasks...`);
+          }
         }
       }
 
-      // Clear cluster IDs from standalone tasks
-      for (const task of result.standalone) {
-        if (task.clusterId) {
-          await this.removeClusterIdFromTask(task);
+      // In force mode: Clear cluster IDs from ALL standalone tasks (removes old clusters)
+      // In smart mode: Only clear cluster IDs from newly analyzed standalone tasks
+      if (forceMode) {
+        console.log('[Clustering] Force mode - clearing cluster IDs from all standalone tasks');
+        let clearedCount = 0;
+        for (const task of result.standalone) {
+          if (task.clusterId) {
+            await this.removeClusterIdFromTask(task);
+            clearedCount++;
+          }
         }
+        if (clearedCount > 0) {
+          new Notice(`🧹 Cleared ${clearedCount} old cluster IDs from standalone tasks`);
+        }
+      } else {
+        console.log('[Clustering] Smart mode - preserving existing cluster IDs');
+        // In smart mode, standalone tasks are only the newly analyzed ones without clusters
+        // We don't remove cluster IDs in smart mode since we want to preserve existing clusters
       }
 
       console.log('[Clustering] Saved cluster IDs to tasks');
@@ -2056,6 +2306,65 @@ export class TaskDashboardView extends ItemView {
     }
   }
 
+  private async loadCustomClusterTitles() {
+    try {
+      const data = await this.app.vault.adapter.read('.obsidian/plugins/meeting-tasks/cluster-titles.json');
+      const parsed = JSON.parse(data);
+      this.customClusterTitles = new Map(Object.entries(parsed));
+      console.log('[ClusterTitles] Loaded', this.customClusterTitles.size, 'custom titles');
+    } catch (error) {
+      // File doesn't exist or parsing failed - start fresh
+      this.customClusterTitles = new Map();
+    }
+  }
+
+  private async saveCustomClusterTitles() {
+    try {
+      const obj = Object.fromEntries(this.customClusterTitles);
+      await this.app.vault.adapter.write(
+        '.obsidian/plugins/meeting-tasks/cluster-titles.json',
+        JSON.stringify(obj, null, 2)
+      );
+      console.log('[ClusterTitles] Saved', this.customClusterTitles.size, 'custom titles');
+    } catch (error) {
+      console.error('[ClusterTitles] Failed to save:', error);
+    }
+  }
+
+  private async setClusterTitle(clusterId: string, newTitle: string) {
+    this.customClusterTitles.set(clusterId, newTitle);
+    await this.saveCustomClusterTitles();
+
+    // Update the cluster in memory
+    if (this.clusteringResult) {
+      const cluster = this.clusteringResult.clusters.find(c => c.id === clusterId);
+      if (cluster) {
+        cluster.title = newTitle;
+      }
+    }
+  }
+
+  private async promptForClusterTitle(currentTitle: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const modal = new ClusterTitleModal(
+        this.app,
+        currentTitle,
+        (newTitle: string) => {
+          resolve(newTitle);
+        }
+      );
+
+      // Resolve with null when modal closes without submission
+      const originalOnClose = modal.onClose.bind(modal);
+      modal.onClose = function() {
+        originalOnClose();
+        resolve(null);
+      };
+
+      modal.open();
+    });
+  }
+
   private async displayClusteredTasks(container: HTMLElement) {
     // Build clusters from saved cluster IDs in tasks
     if (!this.clusteringResult) {
@@ -2063,7 +2372,27 @@ export class TaskDashboardView extends ItemView {
     }
 
     if (!this.clusteringResult) {
-      new Notice('No clusters found. Process some emails first to create clusters.');
+      // No clusters found - display all tasks in normal view instead
+      console.log('[DisplayClustered] No clusters found, falling back to normal view');
+      new Notice('No clusters found. Showing all tasks in normal view.');
+
+      // Switch to normal view
+      this.showClustered = false;
+
+      // Update button text
+      if (this.clusterToggleBtn) {
+        this.clusterToggleBtn.textContent = '🧩 Show Clustered View';
+      }
+
+      // Display tasks normally
+      const displayTasks = this.currentFilter === 'delegated' ? this.allTasks : this.getFilteredTasks();
+      await this.displayTasks(container, displayTasks);
+
+      // Re-apply active filters
+      if (this.activeFilters.size > 0) {
+        this.applyMultipleFilters();
+      }
+
       return;
     }
 
@@ -2073,14 +2402,21 @@ export class TaskDashboardView extends ItemView {
 
     // Display clusters
     if (this.clusteringResult.clusters.length > 0) {
-      const clustersSection = container.createDiv('task-section clusters-section');
-      clustersSection.createEl('h2', {
-        text: `🧩 Task Clusters (${this.clusteringResult.clusters.length})`,
-        cls: 'clusters-header'
-      });
+      // Count clusters with incomplete tasks
+      const clustersWithIncompleteTasks = this.clusteringResult.clusters.filter(c =>
+        c.tasks.some(t => !t.completed)
+      );
 
-      for (const cluster of this.clusteringResult.clusters) {
-        await this.createClusterCard(clustersSection, cluster);
+      if (clustersWithIncompleteTasks.length > 0) {
+        const clustersSection = container.createDiv('task-section clusters-section');
+        clustersSection.createEl('h2', {
+          text: `🧩 Task Clusters (${clustersWithIncompleteTasks.length})`,
+          cls: 'clusters-header'
+        });
+
+        for (const cluster of this.clusteringResult.clusters) {
+          await this.createClusterCard(clustersSection, cluster);
+        }
       }
     }
 
@@ -2101,7 +2437,10 @@ export class TaskDashboardView extends ItemView {
       const clusterMap = new Map<string, Task[]>();
       const standalone: Task[] = [];
 
-      for (const task of this.allTasks) {
+      // Use filtered tasks (respects "My Tasks" setting)
+      const tasksToCluster = this.getFilteredTasks();
+
+      for (const task of tasksToCluster) {
         if (task.completed) continue; // Skip completed tasks
 
         if (task.clusterId) {
@@ -2135,8 +2474,8 @@ export class TaskDashboardView extends ItemView {
           }
         }
 
-        // Create title from common words or first task
-        const title = this.generateClusterTitle(tasks);
+        // Use custom title if available, otherwise generate from tasks
+        const title = this.customClusterTitles.get(clusterId) || this.generateClusterTitle(tasks);
 
         clusters.push({
           id: clusterId,
@@ -2155,7 +2494,7 @@ export class TaskDashboardView extends ItemView {
       return {
         clusters,
         standalone,
-        totalTasksAnalyzed: this.allTasks.filter(t => !t.completed).length,
+        totalTasksAnalyzed: tasksToCluster.filter(t => !t.completed).length,
         clustersCreated: clusters.length,
         summary: `Loaded ${clusters.length} saved clusters`
       };
@@ -2248,16 +2587,52 @@ export class TaskDashboardView extends ItemView {
   }
 
   private async createClusterCard(container: HTMLElement, cluster: TaskCluster) {
+    // Filter out completed tasks
+    const incompleteTasks = cluster.tasks.filter(t => !t.completed);
+
+    // Don't show cluster if all tasks are completed
+    if (incompleteTasks.length === 0) {
+      return;
+    }
+
     const card = container.createDiv(`cluster-card ${cluster.priority}-card`);
 
     // Cluster header
     const header = card.createDiv('cluster-header');
 
     const titleRow = header.createDiv('cluster-title-row');
-    titleRow.createEl('h3', {
-      text: `${cluster.title} (${cluster.tasks.length} tasks)`,
+
+    const titleElement = titleRow.createEl('h3', {
+      text: `${cluster.title} (${incompleteTasks.length} tasks)`,
       cls: 'cluster-title'
     });
+
+    // Add edit button
+    const editBtn = titleRow.createEl('button', {
+      text: '✏️',
+      cls: 'cluster-edit-btn',
+      title: 'Edit cluster title'
+    });
+
+    editBtn.onclick = async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+
+      console.log('[ClusterTitle] Edit button clicked for cluster:', cluster.id);
+
+      const currentTitle = cluster.title;
+      console.log('[ClusterTitle] Current title:', currentTitle);
+
+      const newTitle = await this.promptForClusterTitle(currentTitle);
+      console.log('[ClusterTitle] New title:', newTitle);
+
+      if (newTitle && newTitle !== currentTitle) {
+        console.log('[ClusterTitle] Updating title...');
+        await this.setClusterTitle(cluster.id, newTitle);
+        titleElement.setText(`${newTitle} (${incompleteTasks.length} tasks)`);
+        new Notice(`✅ Cluster title updated to: ${newTitle}`);
+      }
+    };
 
     // Confidence badge
     const confidenceBadge = titleRow.createEl('span', {
@@ -2295,41 +2670,126 @@ export class TaskDashboardView extends ItemView {
       }
     }
 
-    // Task list
-    const taskList = card.createEl('ul', { cls: 'cluster-task-list' });
+    // Task grid (same as normal view)
+    const taskGrid = card.createDiv('task-grid');
 
-    for (const task of cluster.tasks) {
-      const li = taskList.createEl('li', { cls: 'cluster-task-item' });
+    // Group tasks by assignee (same as normal view)
+    const grouped: { [key: string]: typeof incompleteTasks } = {};
+    incompleteTasks.forEach(task => {
+      const key = task.assignee || 'Unassigned';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(task);
+    });
 
-      // Task text
-      const textSpan = li.createEl('span', {
-        text: task.text,
-        cls: 'task-text clickable'
+    // Sort assignees alphabetically
+    const assignees = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+
+    for (const assignee of assignees) {
+      const taskCard = taskGrid.createDiv(`task-card ${cluster.priority}-card`);
+
+      // Card header with assignee name
+      const cardHeader = taskCard.createDiv('card-header');
+      cardHeader.createEl('h3', {
+        text: `👤 ${assignee}`,
+        cls: 'card-assignee-title'
       });
 
-      textSpan.onclick = async () => {
-        const leaf = this.app.workspace.getLeaf(false);
-        await leaf.openFile(task.file);
-      };
+      // Task list
+      const taskList = taskCard.createEl('ul', { cls: 'task-list' });
 
-      // Metadata
-      const meta = li.createDiv('task-meta');
-      meta.createEl('span', {
-        text: `👤 ${task.assignee}`,
-        cls: 'task-assignee'
-      });
+      for (const task of grouped[assignee]) {
+        const li = taskList.createEl('li', { cls: 'task-list-item' });
 
-      if (task.dueDate) {
-        meta.createEl('span', {
-          text: `📅 ${task.dueDate}`,
-          cls: 'task-due'
+        // Create checkbox
+        const checkbox = li.createEl('input', {
+          type: 'checkbox',
+          cls: 'task-checkbox'
         });
-      }
+        checkbox.checked = task.completed;
+        checkbox.onclick = async () => {
+          await this.toggleTask(task, checkbox.checked, li);
+        };
 
-      meta.createEl('span', {
-        text: `📄 ${task.file.basename}`,
-        cls: 'task-source'
-      });
+        // Task content wrapper
+        const content = li.createDiv('task-content');
+
+        // Task text
+        const textSpan = content.createEl('span', {
+          text: task.text,
+          cls: task.completed ? 'task-text completed clickable' : 'task-text clickable'
+        });
+
+        textSpan.onclick = async () => {
+          const leaf = this.app.workspace.getLeaf(false);
+          await leaf.openFile(task.file);
+        };
+
+        // Metadata
+        const meta = content.createDiv('task-meta');
+
+        // Source file (show first, like normal view)
+        const sourceSpan = meta.createEl('span', {
+          cls: 'task-source clickable',
+          text: `📄 ${task.file.basename}`
+        });
+        sourceSpan.onclick = textSpan.onclick;
+        sourceSpan.title = `Click to open: ${task.file.basename}`;
+
+        if (task.dueDate) {
+          const dueSpan = meta.createEl('span', { cls: 'task-due' });
+          dueSpan.setText(`📅 ${task.dueDate}`);
+
+          // Check if overdue
+          if (!task.completed && new Date(task.dueDate) < new Date()) {
+            dueSpan.addClass('overdue');
+          }
+        }
+
+        if (task.category) {
+          meta.createEl('span', {
+            text: `#${task.category}`,
+            cls: 'task-category'
+          });
+        }
+
+        if (task.confidence && task.confidence < 70) {
+          meta.createEl('span', {
+            text: `⚠️ ${task.confidence}%`,
+            cls: 'task-confidence'
+          });
+        }
+
+        // Display delegation metadata
+        if (task.delegatedFrom) {
+          // Add "Delegated" tag
+          const delegatedTag = meta.createEl('span', {
+            cls: 'task-tag task-delegated-tag',
+            text: 'DELEGATED',
+            title: `Delegated from ${task.delegatedFrom}${task.delegatedDate ? ' on ' + task.delegatedDate : ''}`
+          });
+
+          const delegationSpan = meta.createEl('span', {
+            cls: 'task-delegation',
+            title: `Delegated from ${task.delegatedFrom}${task.delegatedDate ? ' on ' + task.delegatedDate : ''}`
+          });
+          delegationSpan.setText(`🔗 from @${task.delegatedFrom}`);
+          if (task.delegatedDate) {
+            delegationSpan.setText(`🔗 from @${task.delegatedFrom} 📆 ${task.delegatedDate}`);
+          }
+        }
+
+        // Display delegation chain if present
+        if (task.delegationChain && task.delegationChain.length > 0) {
+          const chainSpan = meta.createEl('span', {
+            cls: 'task-delegation-chain',
+            title: 'Delegation history'
+          });
+          const chainText = task.delegationChain
+            .map(d => `@${d.assignee} (${d.date})`)
+            .join(' → ');
+          chainSpan.setText(`🔗 Chain: ${chainText}`);
+        }
+      }
     }
   }
 }

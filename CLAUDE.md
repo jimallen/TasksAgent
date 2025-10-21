@@ -92,14 +92,21 @@ npm run clean        # Clean build artifacts
 - Real-time statistics
 - Inline task editing
 
-### Task Clustering (v3.1)
+### Task Clustering (v3.1+)
 - **Automatic clustering** after email import (runs in parallel with batch processing)
 - **Persistent storage** via `🧩 cluster:id` markers in task lines
 - **JSON auto-repair** for truncated Claude responses (missing braces/brackets)
-- **Smart grouping**: Identifies duplicates, similar tasks, related projects
+- **Smart grouping**: Identifies duplicates, similar tasks, related projects using **source email context**
 - **Combination recommendations**: Claude suggests merging tasks with confidence scores
 - **Filter integration**: All filters work in both normal and clustered views
 - **Instant toggle**: Switch views without re-clustering
+- **Editable titles**: Click ✏️ button to customize cluster names (stored in cluster-titles.json)
+- **Smart vs Force re-clustering**:
+  - **Smart**: Only clusters new tasks (preserves existing clusters)
+  - **Force**: Re-analyzes ALL tasks (creates fresh clusters)
+  - Accessible via dropdown on re-cluster button
+- **Progress notifications**: Real-time updates during clustering process
+- **Source context**: Reads first 500 chars of email/meeting for better clustering
 
 ### Note Organization
 ```
@@ -410,11 +417,22 @@ Claude provides:
 ### Code Locations
 
 - **Clustering logic**: `src/taskClusterer.ts`
-- **Auto-trigger**: `src/main.ts:625-629` (after batch completes)
-- **Persistence**: `src/main.ts:984-1019` (add/remove cluster IDs)
-- **Dashboard integration**: `src/taskDashboard.ts:225-233` (auto-restore)
-- **Cluster view**: `src/taskDashboard.ts:1820-1904` (cluster cards)
-- **Filter integration**: `src/taskDashboard.ts:2000-2066` (filter clusters)
+  - Source context integration: `buildClusteringPrompt()` reads email content
+  - Progress callback support in `clusterTasks()`
+- **Auto-trigger**: `src/main.ts` (after batch completes)
+- **Persistence**: `src/taskDashboard.ts`
+  - `addClusterIdToTask()` - adds cluster IDs to task lines
+  - `removeClusterIdFromTask()` - removes cluster IDs
+  - `saveClusterIds()` - handles smart vs force modes
+- **Dashboard integration**: `src/taskDashboard.ts`
+  - Auto-restore: `buildClusteringFromSavedIds()`
+  - Cluster view: `createClusterCard()` with edit button
+  - Filter integration: `applyMultipleFiltersToClusters()`
+  - Re-cluster button: Split button with dropdown (smart/force modes)
+- **Custom titles storage**: `.obsidian/plugins/meeting-tasks/cluster-titles.json`
+  - `loadCustomClusterTitles()` - loads on dashboard startup
+  - `saveCustomClusterTitles()` - persists after editing
+  - `setClusterTitle()` - updates both memory and storage
 
 ## Future Enhancements
 - **Custom clustering prompts**: User-defined grouping logic

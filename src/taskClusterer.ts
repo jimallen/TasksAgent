@@ -11,6 +11,9 @@ export interface Task {
   file: any;
   line: number;
   rawLine: string;
+  delegatedFrom?: string;
+  delegatedDate?: string;
+  delegationChain?: Array<{ assignee: string; date: string }>;
   clusterId?: string;
 }
 
@@ -46,7 +49,7 @@ export class TaskClusterer {
   /**
    * Cluster similar tasks using Claude AI
    */
-  async clusterTasks(tasks: Task[]): Promise<ClusteringResult> {
+  async clusterTasks(tasks: Task[], vault?: any, onProgress?: (message: string) => void): Promise<ClusteringResult> {
     if (!this.apiKey) {
       console.warn('No Claude API key found, clustering unavailable');
       return {
@@ -69,8 +72,13 @@ export class TaskClusterer {
     }
 
     try {
-      const prompt = this.buildClusteringPrompt(tasks);
+      if (onProgress) onProgress('Building clustering prompt...');
+      const prompt = await this.buildClusteringPrompt(tasks, vault);
+
+      if (onProgress) onProgress(`Analyzing ${tasks.length} tasks with Claude AI...`);
       const response = await this.callClaude(prompt);
+
+      if (onProgress) onProgress('Parsing clustering results...');
       return this.parseClusteringResponse(response, tasks);
     } catch (error) {
       console.error('Task clustering failed:', error);
@@ -87,26 +95,57 @@ export class TaskClusterer {
   /**
    * Build the clustering prompt for Claude
    */
-  private buildClusteringPrompt(tasks: Task[]): string {
-    const taskList = tasks.map((task, idx) => {
-      return `${idx}. "${task.text}" [Assignee: ${task.assignee}] [Priority: ${task.priority}] [Category: ${task.category || 'none'}] [Due: ${task.dueDate || 'none'}]`;
-    }).join('\n');
+  private async buildClusteringPrompt(tasks: Task[], vault?: any): Promise<string> {
+    // Load source content for each task
+    const tasksWithContext = await Promise.all(tasks.map(async (task, idx) => {
+      let sourceContext = '';
+
+      if (vault && task.file) {
+        try {
+          const content = await vault.read(task.file);
+
+          // Extract title from filename or frontmatter
+          const titleMatch = content.match(/^---\n[\s\S]*?title:\s*(.+?)\n/m);
+          const title = titleMatch ? titleMatch[1] : task.file.basename;
+
+          // Extract email content (skip frontmatter and focus on key sections)
+          const contentWithoutFrontmatter = content.replace(/^---\n[\s\S]*?\n---\n/, '');
+
+          // Get first 500 chars as context (enough for meeting topic/email subject)
+          const contextSnippet = contentWithoutFrontmatter
+            .substring(0, 500)
+            .replace(/\n+/g, ' ')
+            .trim();
+
+          sourceContext = `\n   Source: "${title}"\n   Context: ${contextSnippet}`;
+        } catch (error) {
+          console.warn(`Failed to load source for task ${idx}:`, error);
+        }
+      }
+
+      return `${idx}. "${task.text}" [Assignee: ${task.assignee}] [Priority: ${task.priority}] [Category: ${task.category || 'none'}] [Due: ${task.dueDate || 'none'}]${sourceContext}`;
+    }));
+
+    const taskList = tasksWithContext.join('\n\n');
 
     return `You are an expert at analyzing and clustering similar tasks. Analyze the following tasks and identify groups of similar or related tasks that could potentially be combined or should be tracked together.
+
+IMPORTANT: Use the "Source" and "Context" information to understand what meeting/email each task came from. Tasks from the same source (meeting/email) are often related even if the task descriptions seem different.
 
 TASKS TO ANALYZE:
 ${taskList}
 
 Your goals:
 1. **Identify similar tasks** - Tasks that are duplicates, very similar, or closely related
-2. **Identify related tasks** - Tasks that are part of the same project/initiative
+2. **Identify related tasks** - Tasks that are part of the same project/initiative OR from the same meeting/email
 3. **Suggest combinations** - When multiple tasks can be combined into one
 4. **Preserve distinct tasks** - Don't force unrelated tasks into clusters
 
 Clustering guidelines:
+- **Use source context** - Tasks from the same meeting/email about the same topic should be clustered
 - Look for similar descriptions, keywords, or objectives
 - Consider task categories and assignees
-- Group tasks working toward the same goal
+- Group tasks working toward the same goal or project
 - Identify duplicate or near-duplicate tasks
 - Keep minimum cluster size of 2 tasks
 - Don't cluster tasks just because they're from the same assignee

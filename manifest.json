@@ -1,9 +1,9 @@
 {
   "id": "obsidian-meeting-tasks",
   "name": "Meeting Tasks",
-  "version": "3.0.0",
+  "version": "3.2.0",
   "minAppVersion": "1.0.0",
-  "description": "Dynamic Gmail task extraction with configurable label processors. Add unlimited email types via configuration, no code changes needed.",
+  "description": "AI-powered Gmail task extraction with intelligent clustering. Dynamic label processors, editable cluster titles, and smart re-clustering modes.",
   "author": "TasksAgent Team",
   "authorUrl": "https://github.com/jimallen/obsidian-meeting-tasks",
   "fundingUrl": "",

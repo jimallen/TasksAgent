@@ -137,19 +137,24 @@ graph TB
 - **Purpose**: AI-powered task clustering and similarity detection
 - **Capabilities**:
   - **Intelligent grouping** of similar/related tasks
+  - **Source email context** - reads email content for better clustering accuracy
   - **Duplicate detection** and consolidation suggestions
   - **Project-based clustering** for related work items
   - **Combination recommendations** with confidence scoring
   - **Automatic clustering** during email import
   - **Parallel processing** alongside extraction
   - **Persistent storage** via cluster IDs in task lines
+  - **Smart vs Force modes** - incremental or complete re-clustering
+  - **Progress notifications** - detailed status updates during clustering
 
 #### 7. Task Dashboard (taskDashboard.ts)
 - **Purpose**: Visual task management interface
 - **Features**:
   - **Cluster view** with expandable groups
+  - **Editable cluster titles** - customize cluster names with persistent storage
   - **Auto-restore** clustering from saved IDs
   - **Instant toggle** between task list and clustered view (no API calls)
+  - **Smart re-cluster dropdown** - choose between smart (preserves clusters) or force (full re-analysis) modes
   - **Multi-filter support** - select multiple filters simultaneously (OR logic)
   - **Simplified filters**: High, Medium, Past Due, This Week, Delegated, Done
   - **Filter persistence** - active filters maintained when switching views
@@ -159,6 +164,7 @@ graph TB
   - **My Tasks only** - always shows only assigned tasks (except delegated view)
   - Next steps visualization with assignees
   - Combined task suggestions from Claude
+  - Task cards grouped by assignee in both views
 
 #### 8. OAuth Server (oauthServer.ts)
 - **Purpose**: Local OAuth callback handler
@@ -557,12 +563,108 @@ graph TB
 2. **Persistent Storage**: Cluster IDs saved directly in markdown task lines
 3. **Auto-Restore**: Dashboard automatically rebuilds clusters from saved IDs (but shows normal view by default)
 4. **Instant Toggle**: Switch between clustered and normal view without API calls
-5. **Smart Grouping**: Claude analyzes task descriptions, categories, assignees, priorities
+5. **Smart Grouping**: Claude analyzes task descriptions, categories, assignees, priorities, and **source email context**
 6. **Duplicate Detection**: Identifies similar or duplicate tasks
 7. **Combination Suggestions**: Recommends merging related tasks with confidence scores
 8. **Filter Integration**: All filters (priority, date, etc.) work in clustered view
 9. **Multi-Filter Support**: Apply multiple filters simultaneously with OR logic
 10. **JSON Auto-Repair**: Automatically fixes truncated Claude responses (missing braces/brackets)
+11. **Editable Titles**: Customize cluster titles with persistent storage in `.obsidian/plugins/meeting-tasks/cluster-titles.json`
+12. **Smart vs Force Re-clustering**:
+    - **Smart**: Only clusters new tasks without cluster IDs (preserves existing clusters)
+    - **Force**: Re-analyzes ALL tasks from scratch (creates fresh clusters)
+13. **Progress Notifications**: Real-time status updates during clustering process
+14. **Source Context Analysis**: Reads email/meeting content (first 500 chars) to improve clustering accuracy
+
+## Dashboard UI Components
+
+### Re-Cluster Button Architecture
+
+```mermaid
+graph LR
+    A[Split Button] --> B[Main Button]
+    A --> C[Dropdown Arrow]
+
+    B -->|Click| D[Smart Re-cluster]
+    C -->|Click| E[Show Menu]
+
+    E --> F{User Selects}
+    F -->|Smart| G[Cluster New Tasks Only]
+    F -->|Force| H[Re-analyze All Tasks]
+
+    G --> I[Preserve Existing Clusters]
+    H --> J[Fresh Cluster IDs]
+
+    I --> K[Progress Notifications]
+    J --> K
+
+    K --> L[Reload Tasks]
+    L --> M[Rebuild View]
+
+    style A fill:#f96,stroke:#333,stroke-width:2px
+    style D fill:#9f6,stroke:#333,stroke-width:2px
+    style H fill:#f66,stroke:#333,stroke-width:2px
+```
+
+### Cluster Title Editing Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Dashboard
+    participant Modal
+    participant Storage
+    participant Vault
+
+    User->>Dashboard: Click ✏️ edit button
+    Dashboard->>Modal: Open ClusterTitleModal
+    Modal->>User: Show input with current title
+
+    User->>Modal: Edit title
+    User->>Modal: Click Save
+
+    Modal->>Dashboard: Return new title
+    Dashboard->>Storage: Save to cluster-titles.json
+    Dashboard->>Dashboard: Update in-memory cluster
+    Dashboard->>User: Update UI immediately
+
+    Note over Storage: Persisted separately from vault
+    Note over Vault: Cluster IDs remain in task lines
+
+    Dashboard->>User: Show success notice
+```
+
+### Data Storage Architecture
+
+```mermaid
+graph TB
+    subgraph "Task Data (In Vault)"
+        A[Markdown Files] --> B[Task Lines]
+        B --> C[Cluster IDs: 🧩 cluster:xyz]
+    end
+
+    subgraph "Cluster Metadata (Plugin Storage)"
+        D[cluster-titles.json] --> E[Custom Titles]
+        E --> F[clusterId → title mapping]
+    end
+
+    subgraph "Dashboard Runtime"
+        G[Load Tasks] --> H[Extract Cluster IDs]
+        I[Load Custom Titles] --> J[Apply to Clusters]
+
+        H --> K[Group Tasks by ID]
+        J --> K
+        K --> L[Build Cluster Objects]
+        L --> M[Display to User]
+    end
+
+    C -.-> H
+    F -.-> I
+
+    style C fill:#9f6,stroke:#333,stroke-width:2px
+    style F fill:#6f9,stroke:#333,stroke-width:2px
+    style L fill:#bbf,stroke:#333,stroke-width:2px
+```
 
 ## Future Architecture Considerations
 
@@ -574,3 +676,4 @@ graph TB
 - **Template Engine**: For customizable note formats
 - **Analytics Dashboard**: For productivity insights with cluster insights
 - **Bulk Operations**: For batch task management across clusters
+- **Cluster Sharing**: Export/import cluster configurations between vaults

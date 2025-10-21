@@ -2,7 +2,7 @@
 
 > Automatically extract actionable tasks from Gmail meeting transcripts using Claude AI and create organized meeting notes in Obsidian.
 
-![Version](https://img.shields.io/badge/version-3.1.0-blue)
+![Version](https://img.shields.io/badge/version-3.2.0-blue)
 ![Obsidian](https://img.shields.io/badge/Obsidian-v0.15.0+-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -89,16 +89,19 @@ npm run deploy     # Deploy to vault
 
 See [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md) for details.
 
-## ✨ What's New in v3.1
+## ✨ What's New in v3.1+
 
 ### AI-Powered Task Clustering
 - **Automatic clustering**: Runs in parallel during email import
-- **Smart grouping**: Identifies duplicates, similar tasks, and related projects
+- **Smart grouping**: Identifies duplicates, similar tasks, and related projects using **source email context**
 - **Persistent storage**: Cluster IDs saved in task lines (`🧩 cluster:abc123`)
 - **Auto-restore**: Dashboard automatically rebuilds clusters from saved IDs (shows normal view by default)
 - **Instant toggle**: Switch between views without re-clustering
 - **JSON auto-repair**: Automatically fixes truncated Claude responses
 - **Combination suggestions**: Claude recommends merging tasks with confidence scores
+- **Editable cluster titles**: Customize cluster names with modal editor (persisted separately)
+- **Smart vs Force re-clustering**: Choose between incremental or complete re-analysis via dropdown
+- **Progress notifications**: Real-time status updates during clustering process
 
 ### Enhanced Dashboard UI
 - **Multi-filter support**: Select multiple filters (OR logic) - e.g., High + Past Due
@@ -106,6 +109,8 @@ See [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md) for details.
 - **Filter persistence**: Active filters maintained across view toggles
 - **My Tasks only**: Removed toggle - always shows your tasks (except delegated view)
 - **Instant view switching**: No API calls when toggling between list and cluster views
+- **Unified task layout**: Both clustered and normal views use same card-based layout grouped by assignee
+- **Split button UI**: Single re-cluster button with dropdown for smart/force modes
 
 ### v3.0 Features
 - Dynamic label processor architecture - add email types via configuration

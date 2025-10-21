@@ -874,8 +874,8 @@ export default class MeetingTasksPlugin extends Plugin {
 
       console.log(`[Clustering] Clustering ${incompleteTasks.length} tasks...`);
 
-      // Cluster tasks
-      const result = await this.taskClusterer.clusterTasks(incompleteTasks);
+      // Cluster tasks (pass vault for source context)
+      const result = await this.taskClusterer.clusterTasks(incompleteTasks, this.app.vault);
 
       if (!result || result.clusters.length === 0) {
         console.log('[Clustering] No clusters found');
