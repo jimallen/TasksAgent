@@ -6,6 +6,8 @@
 ![Obsidian](https://img.shields.io/badge/Obsidian-v0.15.0+-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+**Requirements:** Anthropic Claude API key + Google OAuth credentials (free tiers available)
+
 ## 🌟 Features
 
 - **🧩 AI Task Clustering** - Automatically groups similar/related tasks with persistent storage
@@ -117,15 +119,20 @@ The interactive script will find your Obsidian vaults and install the plugin aut
 
 ### Configuration
 
-1. **Google OAuth Setup**
+**⚠️ Required API Keys:**
+- **Anthropic Claude API** - For AI-powered task extraction
+- **Google OAuth credentials** - For Gmail integration
+
+1. **Claude AI Setup** (Required)
+   - Get API key from [Anthropic Console](https://console.anthropic.com/)
+   - Add to plugin settings: Settings → Community Plugins → Meeting Tasks
+   - Choose model: `claude-sonnet-4` (recommended) or `claude-3-5-haiku` (faster/cheaper)
+   - Free tier available, pay-as-you-go pricing
+
+2. **Google OAuth Setup** (Required)
    - Follow the [Google OAuth Setup Guide](./docs/google-oauth-setup.md) for detailed instructions
    - Quick summary: Create project → Enable Gmail API → Configure OAuth → Get credentials
    - Copy Client ID and Secret to plugin settings
-
-2. **Claude AI Setup** (Optional)
-   - Get API key from [Anthropic](https://console.anthropic.com/)
-   - Add to plugin settings
-   - Choose model (Haiku, Sonnet, or Opus)
 
 3. **Plugin Settings**
    - Set lookback time (e.g., "3d" for 3 days)
