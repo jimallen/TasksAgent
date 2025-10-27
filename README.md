@@ -124,7 +124,7 @@ The interactive script will find your Obsidian vaults and install the plugin aut
 - **Google OAuth credentials** - For Gmail integration
 
 1. **Claude AI Setup** (Required)
-   - Get API key from [Anthropic Console](https://console.anthropic.com/)
+   - Get API key from [Anthropic Console](https://console.anthropic.com/) → [API Keys](https://console.anthropic.com/settings/keys)
    - Add to plugin settings: Settings → Community Plugins → Meeting Tasks
    - Choose model: `claude-sonnet-4` (recommended) or `claude-3-5-haiku` (faster/cheaper)
    - Free tier available, pay-as-you-go pricing
