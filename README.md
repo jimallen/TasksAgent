@@ -36,6 +36,7 @@ No code changes needed - just configure labels in plugin settings!
 ## 📚 Documentation
 
 - [Google OAuth Setup Guide](./docs/google-oauth-setup.md) - **Start here!** Step-by-step Google Cloud setup
+- [Dashboard User Guide](./docs/DASHBOARD_GUIDE.md) - **Complete guide** to using the task dashboard
 - [System Architecture](./docs/system-architecture.md) - Technical architecture and diagrams
 - [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md) - Development and deployment instructions
 - [Example Outputs](./examples/) - Sample meeting notes, clusters, and task formats
@@ -198,7 +199,7 @@ Processors:
 - Click to complete tasks
 - Edit task details inline
 
-See [System Architecture](./docs/system-architecture.md) for detailed architecture diagrams.
+**📖 See the complete [Dashboard User Guide](./docs/DASHBOARD_GUIDE.md)** for detailed instructions, tips, and troubleshooting.
 
 ## 🔧 Development
 
