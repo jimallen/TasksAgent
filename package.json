@@ -1,6 +1,6 @@
 {
   "name": "obsidian-meeting-tasks",
-  "version": "3.0.0",
+  "version": "3.2.1",
   "description": "Dynamic Gmail task extraction with configurable label processors for Obsidian",
   "main": "main.js",
   "scripts": {
