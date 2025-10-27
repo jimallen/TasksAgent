@@ -306,7 +306,7 @@ Automated test suite planned for future releases:
 - E2E tests for dashboard interactions
 - CI/CD pipeline with automated quality gates
 
-**Why Manual Testing?** For a portfolio project focused on rapid iteration and AI-assisted development, manual testing provided faster feedback cycles during initial development. The BMAD methodology used here emphasizes working software over comprehensive test automation in early phases.
+**Why Manual Testing?** During rapid iteration and AI-assisted development, manual testing provides faster feedback cycles for initial development. The BMAD methodology emphasizes working software over comprehensive test automation in early phases, with automation added as features stabilize.
 
 ## 📄 License
 
