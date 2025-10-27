@@ -12,7 +12,11 @@
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist main.js",
     "release": "npm run clean && npm run build:release",
-    "deploy": "./deploy.sh"
+    "deploy": "./deploy.sh",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "obsidian",
@@ -26,10 +30,13 @@
   "type": "module",
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "@vitest/coverage-v8": "^4.0.4",
+    "@vitest/ui": "^4.0.4",
     "esbuild": "^0.25.9",
     "obsidian": "^1.8.7",
     "tslib": "^2.8.1",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.4"
   },
   "dependencies": {
     "@types/moment": "^2.11.29",

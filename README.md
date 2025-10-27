@@ -275,38 +275,69 @@ Including development tooling demonstrates:
 
 ## 🧪 Testing
 
-### Current Approach
-This project currently uses **manual testing** with a structured validation workflow:
+### Unit Tests
 
-**Manual Test Process:**
+**Framework:** Vitest (fast, modern TypeScript testing)
+
+**Run tests:**
+```bash
+npm test              # Run all tests once
+npm run test:watch    # Watch mode (re-runs on changes)
+npm run test:ui       # Visual UI in browser
+npm run test:coverage # Generate coverage report
+```
+
+**Current Coverage:**
+- ProcessorRegistry: 100% coverage (24 tests)
+- Core routing and label matching logic
+- Configuration handling and edge cases
+
+**Test Structure:**
+```
+tests/
+├── unit/               # Unit tests for pure logic
+│   └── processorRegistry.test.ts
+├── integration/        # Integration tests (planned)
+├── mocks/             # Mock data and fixtures
+│   └── gmailMessage.mock.ts
+└── __mocks__/         # Module mocks
+    └── obsidian.ts    # Mock Obsidian API
+```
+
+### Manual Testing
+
+For features requiring Obsidian integration:
+
 1. **Build**: `npm run build` - Verify TypeScript compilation
 2. **Deploy**: `npm run deploy` - Install to test vault
 3. **OAuth Flow**: Test Gmail authentication and token refresh
-4. **Email Processing**:
-   - Process emails from both label types (transcript, action)
-   - Verify task extraction accuracy
-   - Test pagination for large email batches
-5. **Dashboard Features**:
-   - Test all filter combinations
-   - Verify clustering functionality (smart and force modes)
-   - Validate inline task editing
-   - Test cluster title customization
-6. **Edge Cases**:
-   - Empty email results
-   - Malformed email content
-   - API rate limits and error handling
-   - Token expiration scenarios
+4. **Email Processing**: Process emails and verify task extraction
+5. **Dashboard**: Test filters, clustering, and inline editing
 
-**Console Verification:** All testing includes monitoring browser DevTools (`Ctrl+Shift+I`) for errors and warnings.
+**Console Verification:** Monitor DevTools (`Ctrl+Shift+I`) for errors
 
-### Future Roadmap
-Automated test suite planned for future releases:
-- Unit tests for core extraction logic
-- Integration tests for Gmail/Claude API interactions
+### Testing Documentation
+
+- **[Testing Strategy](./docs/TESTING_STRATEGY.md)** - Comprehensive testing plan and testable components
+- **[Testing Setup](./docs/TESTING_SETUP.md)** - Step-by-step guide for adding new tests
+
+### Roadmap
+
+**Phase 1 (Complete):**
+- ✅ Vitest framework configured
+- ✅ ProcessorRegistry unit tests
+- ✅ Mock Obsidian API infrastructure
+
+**Phase 2 (Planned):**
+- Prompt building logic tests
+- Response parsing tests
+- Task formatting tests
+- Target: 60% overall coverage
+
+**Phase 3 (Future):**
+- Integration tests for Gmail/Claude API
 - E2E tests for dashboard interactions
 - CI/CD pipeline with automated quality gates
-
-**Why Manual Testing?** During rapid iteration and AI-assisted development, manual testing provides faster feedback cycles for initial development. The BMAD methodology emphasizes working software over comprehensive test automation in early phases, with automation added as features stabilize.
 
 ## 📄 License
 

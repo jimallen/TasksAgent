@@ -24,3 +24,8 @@ node_modules/
 *.tmp
 *~
 *.bak
+
+# Test coverage reports
+coverage/
+.coverage/
+*.lcov
