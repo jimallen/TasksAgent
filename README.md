@@ -17,6 +17,22 @@
 - **📁 Smart Organization** - Automatic folder structure (TaskAgent/Label/YYYY/MM/)
 - **♻️ Email Reprocessing** - Update notes with improved extraction logic
 
+### How Label Processing Works
+
+The plugin monitors **Gmail labels** you configure and processes emails differently based on type:
+
+- **`transcript` label** → Meeting transcripts with conversation-style extraction
+- **`action` label** → Action item emails with task-focused extraction
+- **Add your own labels** → Configure any Gmail label to create custom workflows
+
+**Example:** Apply the `action` label to an email in Gmail, and the plugin will:
+1. Detect the label during next sync
+2. Extract action items using specialized prompts
+3. Create a note in `TaskAgent/Action/YYYY/MM/`
+4. Add tasks to your dashboard
+
+No code changes needed - just configure labels in plugin settings!
+
 ## 📚 Documentation
 
 - [Google OAuth Setup Guide](./docs/google-oauth-setup.md) - **Start here!** Step-by-step Google Cloud setup
@@ -139,6 +155,24 @@ The interactive script will find your Obsidian vaults and install the plugin aut
    - Configure Gmail labels (e.g., "transcript, action")
    - Configure label processors (maps labels to folders and extraction types)
    - Set base notes folder (default: "TaskAgent")
+
+**Adding Custom Labels:**
+
+Want to process different types of emails? Just add more labels!
+
+1. In Gmail: Create a label (e.g., "standup", "reports")
+2. Apply that label to emails you want processed
+3. In plugin settings: Add the label to your configuration
+4. Configure the folder name and extraction type (meeting or actionitem)
+
+**Example configuration:**
+```
+Labels: transcript, action, standup
+Processors:
+- transcript → Transcript folder (meeting extraction)
+- action → Action folder (action item extraction)
+- standup → Standup folder (meeting extraction)
+```
 
 **Configuration Reference:**
 - See [`data.json.example`](./data.json.example) for complete configuration structure
