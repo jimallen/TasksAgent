@@ -2,7 +2,7 @@
 
 > Automatically extract actionable tasks from Gmail meeting transcripts using Claude AI and create organized meeting notes in Obsidian.
 
-![Version](https://img.shields.io/badge/version-3.2.1-blue)
+![Version](https://img.shields.io/badge/version-3.2.2-blue)
 ![Obsidian](https://img.shields.io/badge/Obsidian-v0.15.0+-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
