@@ -4,7 +4,7 @@
   "version": "3.2.0",
   "minAppVersion": "1.0.0",
   "description": "AI-powered Gmail task extraction with intelligent clustering. Dynamic label processors, editable cluster titles, and smart re-clustering modes.",
-  "author": "TasksAgent Team",
+  "author": "Jim Allen",
   "authorUrl": "https://github.com/jimallen/obsidian-meeting-tasks",
   "fundingUrl": "",
   "isDesktopOnly": true

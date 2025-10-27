@@ -106,6 +106,21 @@ for vault_path in "${SELECTED_VAULTS[@]}"; do
 
     mkdir -p "$PLUGIN_DIR"
 
+    # Copy ONLY runtime files to Obsidian plugin directory
+    # Explicitly excludes development files:
+    #   - bmad/ (BMAD framework for AI-assisted development)
+    #   - .claude/ (Claude Code agent configurations)
+    #   - .agent.rules.md (Development workflow rules)
+    #   - src/ (TypeScript source code)
+    #   - data*.json (User-specific configuration with credentials)
+    #   - node_modules/ (Build dependencies)
+    # This ensures the deployed plugin is clean and contains no sensitive data
+
+    if [ ! -f "main.js" ] || [ ! -f "manifest.json" ] || [ ! -f "styles.css" ]; then
+        echo -e "${RED}❌ Required files missing! Run 'npm run build' first.${NC}"
+        exit 1
+    fi
+
     cp main.js "$PLUGIN_DIR/"
     cp manifest.json "$PLUGIN_DIR/"
     cp styles.css "$PLUGIN_DIR/"

@@ -1,5 +1,8 @@
 # User-specific data
 data.json
+data-migrated.json
+data.json.backup
+*.backup
 
 # Build output (main.js is needed for distribution)
 # main.js is tracked in git for easy plugin installation

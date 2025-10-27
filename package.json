@@ -21,7 +21,7 @@
     "tasks",
     "ai"
   ],
-  "author": "",
+  "author": "Jim Allen <jimallen@gmail.com>",
   "license": "MIT",
   "type": "module",
   "devDependencies": {

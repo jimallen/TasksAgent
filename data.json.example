@@ -1,0 +1,27 @@
+{
+  "lookbackTime": "3d",
+  "debugMode": false,
+  "anthropicApiKey": "sk-ant-api03-YOUR_ANTHROPIC_API_KEY_HERE",
+  "googleClientId": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+  "googleClientSecret": "GOCSPX-YOUR_GOOGLE_CLIENT_SECRET",
+  "claudeModel": "claude-sonnet-4-20250514",
+  "dashboardShowOnlyMyTasks": true,
+  "dashboardMyName": "Your Name",
+  "gmailLabels": "transcript, action",
+  "emailNotesFolder": "TaskAgent",
+  "labelProcessors": [
+    {
+      "label": "transcript",
+      "folderName": "Transcript",
+      "promptType": "meeting"
+    },
+    {
+      "label": "action",
+      "folderName": "Action",
+      "promptType": "actionitem"
+    }
+  ],
+  "gmailToken": null,
+  "showDetailedNotifications": true,
+  "processedEmails": []
+}

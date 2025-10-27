@@ -20,21 +20,97 @@
 - [Google OAuth Setup Guide](./docs/google-oauth-setup.md) - **Start here!** Step-by-step Google Cloud setup
 - [System Architecture](./docs/system-architecture.md) - Technical architecture and diagrams
 - [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md) - Development and deployment instructions
+- [Example Outputs](./examples/) - Sample meeting notes, clusters, and task formats
 - [CLAUDE.md](./CLAUDE.md) - AI assistant instructions for contributors
+
+## 📋 Example Output
+
+### Meeting Note with Extracted Tasks
+
+```markdown
+---
+title: Q1 Planning Meeting - Product Team
+emailId: 19960e976514fa1d
+label: transcript
+gmailUrl: https://mail.google.com/mail/u/0/#inbox/19960e976514fa1d
+---
+
+# Q1 Planning Meeting - Product Team
+
+**Email:** [View in Gmail](https://mail.google.com/...)
+**Date:** 2025-01-15
+
+## Action Items
+
+### 🔴 High Priority
+- [ ] Review PRD for new dashboard features [[@Sarah]] 📅 2025-01-20 🔴 ⚠️ 92% #product
+  - Context: Need feedback before dev kickoff next week
+  > "Sarah, can you review the PRD by Friday?"
+
+- [ ] Update API rate limits in production [[@Dev Team]] 📅 2025-01-18 🔴 🧩 cluster:api-work ⚠️ 88% #backend
+  - Context: Current limits causing issues for enterprise customers
+
+### 🟡 Medium Priority
+- [ ] Document new clustering algorithm [[@Jim]] 📅 2025-01-25 🟡 🧩 cluster:docs ⚠️ 85% #documentation
+
+- [ ] Schedule user interview sessions [[@UX Team]] 📅 2025-01-22 🟡 ⚠️ 78% #research
+  - Context: Need 5 participants for dashboard usability study
+
+## Next Steps
+- Follow up on API performance metrics
+- Review clustering feedback from beta users
+```
+
+### Dashboard - Clustered View
+
+When you open the dashboard, AI automatically groups related tasks:
+
+**📦 Cluster: API Performance & Scalability**
+- Update API rate limits in production [[@Dev Team]]
+- Monitor API response times [[@DevOps]]
+- Implement caching layer [[@Backend Team]]
+
+💡 *Claude suggests: These tasks are related to API infrastructure - consider combining into a single epic for coordinated deployment.*
+
+**📦 Cluster: Q1 Documentation**
+- Document new clustering algorithm [[@Jim]]
+- Update README with v3.2 features [[@Jim]]
+- Create video tutorial [[@Marketing]]
+
+**📦 Cluster: User Research Initiative**
+- Schedule user interview sessions [[@UX Team]]
+- Prepare interview scripts [[@Sarah]]
+- Recruit beta testers [[@Product]]
+
+### Key Features Demonstrated
+
+✅ **Smart Task Extraction** - Pulls assignees, dates, priorities from natural language
+✅ **Cluster IDs** - Tasks tagged with `🧩 cluster:id` for persistent grouping
+✅ **Confidence Scores** - `⚠️ 92%` shows AI extraction confidence
+✅ **Context Preservation** - Keeps quotes and additional details
+✅ **Gmail Integration** - Direct links back to source emails
 
 ## 🚀 Quick Start
 
 ### Installation
 
-#### Option 1: Interactive Deployment (Recommended)
+#### Option 1: One-Line Install (Easiest)
 ```bash
+curl -fsSL https://raw.githubusercontent.com/jimallen/obsidian-meeting-tasks/master/install.sh | bash
+```
+Downloads and installs the plugin automatically. Works on macOS, Linux, and Windows (Git Bash).
+
+#### Option 2: Clone and Deploy (For Developers)
+```bash
+git clone https://github.com/jimallen/obsidian-meeting-tasks.git
+cd obsidian-meeting-tasks
 npm install
 npm run deploy
 ```
 The interactive script will find your Obsidian vaults and install the plugin automatically.
 
-#### Option 2: Manual Installation
-1. Download `main.js`, `manifest.json`, and `styles.css`
+#### Option 3: Manual Installation
+1. Download `main.js`, `manifest.json`, and `styles.css` from [latest release](https://github.com/jimallen/obsidian-meeting-tasks/releases/latest)
 2. Create folder: `<vault>/.obsidian/plugins/meeting-tasks/`
 3. Copy the files to that folder
 4. Enable plugin in Obsidian settings
@@ -56,6 +132,11 @@ The interactive script will find your Obsidian vaults and install the plugin aut
    - Configure Gmail labels (e.g., "transcript, action")
    - Configure label processors (maps labels to folders and extraction types)
    - Set base notes folder (default: "TaskAgent")
+
+**Configuration Reference:**
+- See [`data.json.example`](./data.json.example) for complete configuration structure
+- All settings are managed through Obsidian's plugin settings UI
+- The plugin creates `data.json` automatically with your credentials
 
 ## 💡 Usage
 
@@ -88,6 +169,33 @@ npm run deploy     # Deploy to vault
 ```
 
 See [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md) for details.
+
+## 🛠️ Development Methodology
+
+This repository showcases not just the plugin code, but also the **AI-assisted development workflow** used to build it.
+
+### BMAD Framework (`bmad/`)
+The [BMAD (Better Method for Agile Development)](./bmad/README.md) framework orchestrates AI agents through structured workflows for the entire software development lifecycle. This directory contains:
+- Specialized AI agents (PM, Architect, Developer, QA, etc.)
+- Structured workflows for analysis, planning, and implementation
+- Development methodology with scale-adaptive documentation
+
+**Note:** BMAD is development-time tooling only and is NOT deployed with the plugin.
+
+### Claude Code Configuration (`.claude/`)
+Custom [Claude Code](https://claude.com/claude-code) configurations including:
+- Custom slash commands for rapid development
+- Agent configurations for specialized tasks
+- BMAD framework integration commands
+
+See [`.claude/README.md`](./.claude/README.md) for details.
+
+### Why Include These?
+Including development tooling demonstrates:
+- Systematic approach to software development
+- Professional AI-assisted workflows
+- Documentation-first thinking
+- Modern development practices
 
 ## ✨ What's New in v3.1+
 
@@ -123,6 +231,41 @@ See [Build & Deployment Guide](./docs/BUILD_DEPLOYMENT.md) for details.
 - **Authentication fails**: Verify OAuth credentials, ensure Gmail API is enabled
 - **Tasks not extracting**: Check Anthropic API key and usage limits
 - **Changes not showing**: Reload Obsidian (`Cmd/Ctrl + R`)
+
+## 🧪 Testing
+
+### Current Approach
+This project currently uses **manual testing** with a structured validation workflow:
+
+**Manual Test Process:**
+1. **Build**: `npm run build` - Verify TypeScript compilation
+2. **Deploy**: `npm run deploy` - Install to test vault
+3. **OAuth Flow**: Test Gmail authentication and token refresh
+4. **Email Processing**:
+   - Process emails from both label types (transcript, action)
+   - Verify task extraction accuracy
+   - Test pagination for large email batches
+5. **Dashboard Features**:
+   - Test all filter combinations
+   - Verify clustering functionality (smart and force modes)
+   - Validate inline task editing
+   - Test cluster title customization
+6. **Edge Cases**:
+   - Empty email results
+   - Malformed email content
+   - API rate limits and error handling
+   - Token expiration scenarios
+
+**Console Verification:** All testing includes monitoring browser DevTools (`Ctrl+Shift+I`) for errors and warnings.
+
+### Future Roadmap
+Automated test suite planned for future releases:
+- Unit tests for core extraction logic
+- Integration tests for Gmail/Claude API interactions
+- E2E tests for dashboard interactions
+- CI/CD pipeline with automated quality gates
+
+**Why Manual Testing?** For a portfolio project focused on rapid iteration and AI-assisted development, manual testing provided faster feedback cycles during initial development. The BMAD methodology used here emphasizes working software over comprehensive test automation in early phases.
 
 ## 📄 License
 
