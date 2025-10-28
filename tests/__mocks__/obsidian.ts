@@ -179,3 +179,16 @@ export const moment = () => ({
   format: () => '2025-01-27',
   unix: () => Date.now() / 1000
 });
+
+// Platform detection mock
+export const Platform = {
+  isMobile: false,
+  isMobileApp: false,
+  isDesktop: true,
+  isDesktopApp: true,
+  isIosApp: false,
+  isAndroidApp: false,
+  isMacOS: false,
+  isWin: false,
+  isLinux: true,
+};

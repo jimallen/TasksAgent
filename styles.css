@@ -1585,12 +1585,134 @@
   background: var(--background-primary);
 }
 
+/* ============================================================================
+ * Mobile-Specific Styles (Touch-Optimized)
+ * ============================================================================ */
+
 /* Responsive */
 @media (max-width: 768px) {
   .task-grid {
     grid-template-columns: 1fr;
   }
-  
+
+  /* Mobile platform - larger touch targets */
+  .is-mobile .filter-btn {
+    padding: 12px 20px;
+    font-size: 14px;
+    min-height: 44px; /* iOS minimum touch target */
+  }
+
+  .is-mobile .dashboard-control-btn {
+    padding: 14px 24px;
+    font-size: 15px;
+    min-height: 48px;
+  }
+
+  .is-mobile .task-checkbox,
+  .is-mobile input[type="checkbox"] {
+    width: 24px !important;
+    height: 24px !important;
+    margin-right: 12px;
+  }
+
+  .is-mobile .task-list-item {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .is-mobile .task-card {
+    padding: 24px;
+  }
+
+  .is-mobile .task-edit-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
+
+  .is-mobile .cluster-edit-btn {
+    padding: 8px 12px;
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  /* Mobile dashboard header - more compact */
+  .is-mobile .dashboard-header {
+    padding: 20px 16px;
+  }
+
+  .is-mobile .dashboard-header .title {
+    font-size: 24px;
+  }
+
+  .is-mobile .dashboard-controls {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .is-mobile .dashboard-control-btn {
+    width: 100%;
+  }
+
+  .is-mobile .recluster-btn-container {
+    width: 100%;
+  }
+
+  .is-mobile .recluster-main-btn {
+    flex: 1;
+  }
+
+  /* Mobile filters - stack vertically */
+  .is-mobile .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .is-mobile .filter-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Mobile task cards - full width */
+  .is-mobile .task-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  /* Mobile modals - full screen */
+  .is-mobile .modal {
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  /* Mobile typography - more readable */
+  .is-mobile .task-text {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .is-mobile .task-meta span {
+    font-size: 13px;
+    padding: 4px 10px;
+  }
+
+  /* Mobile scrolling - smoother */
+  .is-mobile .task-dashboard-view {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Reduce spacing on mobile for more content */
+  .is-mobile .task-section {
+    margin-bottom: 24px;
+  }
+
+  .is-mobile .cluster-card {
+    padding: 16px;
+    margin-bottom: 12px;
+  }
 }
 
 /* Card edit controls */

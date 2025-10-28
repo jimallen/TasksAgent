@@ -5,7 +5,7 @@ interface OAuthResponse {
 
 export class OAuthServer {
   private server: any = null;
-  private port = 42813;
+  private port = 3000;
   private authCodePromise: Promise<string> | null = null;
   private authCodeResolve: ((code: string) => void) | null = null;
   private authCodeReject: ((error: Error) => void) | null = null;

@@ -14,6 +14,8 @@ import { ClaudeTaskExtractor, TaskExtractionResult } from './claudeExtractor';
 import { TaskDashboardView, TASK_DASHBOARD_VIEW_TYPE } from './taskDashboard';
 import { GmailService, GmailMessage } from './gmailService';
 import { OAuthServer } from './oauthServer';
+import { MobileOAuthHandler } from './oauthMobile';
+import { PlatformManager } from './platform';
 import { processorRegistry, LabelProcessorConfig } from './emailProcessors';
 import { TaskClusterer } from './taskClusterer';
 
@@ -67,6 +69,7 @@ export default class MeetingTasksPlugin extends Plugin {
   claudeExtractor: ClaudeTaskExtractor | null = null;
   taskClusterer: TaskClusterer | null = null;
   oauthServer: OAuthServer | null = null;
+  mobileOAuthHandler: MobileOAuthHandler | null = null;
   private statusBarItem: HTMLElement | null = null;
   private emailIdCache: Set<string> = new Set(); // Cache for performance
 
@@ -290,7 +293,7 @@ export default class MeetingTasksPlugin extends Plugin {
       }
     });
 
-    // Register protocol handler for OAuth callback
+    // Register protocol handler for OAuth callback (desktop)
     this.registerObsidianProtocolHandler('meeting-tasks-oauth', async (params) => {
       if (params.code) {
         try {
@@ -311,6 +314,21 @@ export default class MeetingTasksPlugin extends Plugin {
         }
       } else if (params.error) {
         new Notice(`Authentication failed: ${params.error}`);
+      }
+    });
+
+    // Register protocol handler for mobile OAuth callback
+    // URL scheme: obsidian://meeting-tasks-callback?code=...&state=...
+    this.registerObsidianProtocolHandler('meeting-tasks-callback', async (params) => {
+      console.log('[Mobile OAuth] Callback received');
+
+      if (PlatformManager.isMobile() && this.mobileOAuthHandler) {
+        // Reconstruct full URL for mobile handler
+        const url = `obsidian://meeting-tasks-callback?${new URLSearchParams(params as any).toString()}`;
+        await this.mobileOAuthHandler.handleCallback(url);
+      } else {
+        console.warn('[Mobile OAuth] Handler not available or not on mobile platform');
+        new Notice('Mobile OAuth not configured');
       }
     });
 
@@ -411,6 +429,20 @@ export default class MeetingTasksPlugin extends Plugin {
           this.settings.googleClientSecret
         );
 
+        // Initialize platform-appropriate OAuth handler
+        if (PlatformManager.isMobile()) {
+          console.log('[Platform] Mobile detected - using PKCE OAuth flow');
+          this.mobileOAuthHandler = new MobileOAuthHandler(
+            this.settings.googleClientId,
+            this.settings.googleClientSecret
+          );
+        } else {
+          console.log('[Platform] Desktop detected - using local server OAuth flow');
+          if (!this.oauthServer) {
+            this.oauthServer = new OAuthServer();
+          }
+        }
+
         if (this.gmailService.isAuthenticated()) {
           const connected = await this.gmailService.testConnection();
           if (connected) {
@@ -445,6 +477,15 @@ export default class MeetingTasksPlugin extends Plugin {
     console.log('[processEmails] Starting email processing');
 
     try {
+      // Mobile platform check and warning
+      const isMobile = PlatformManager.isMobile();
+      const maxEmails = PlatformManager.getMaxEmailBatch();
+
+      if (isMobile) {
+        console.log(`[Platform] Mobile detected - limiting to ${maxEmails} emails`);
+        new Notice(`📱 Mobile mode: Processing limited to ${maxEmails} emails`, 3000);
+      }
+
       this.updateStatus('🔄 Starting email processing...');
       new Notice('📧 Starting email processing...');
 
@@ -507,7 +548,7 @@ export default class MeetingTasksPlugin extends Plugin {
       console.log(`[Process] Cache contains ${this.emailIdCache.size} processed email IDs`);
       console.log(`[Process] First 5 cache entries:`, Array.from(this.emailIdCache).slice(0, 5));
 
-      const emailsToProcess = emails.filter(email => {
+      let emailsToProcess = emails.filter(email => {
         if (this.emailIdCache.has(email.id)) {
           skippedCount++;
           console.log(`[Process] Skipping already processed email: ${email.id} - "${email.subject}"`);
@@ -516,6 +557,13 @@ export default class MeetingTasksPlugin extends Plugin {
         console.log(`[Process] Will process new email: ${email.id} - "${email.subject}"`);
         return true;
       });
+
+      // Apply mobile email limit
+      if (isMobile && emailsToProcess.length > maxEmails) {
+        console.log(`[Platform] Limiting ${emailsToProcess.length} emails to ${maxEmails} for mobile`);
+        emailsToProcess = emailsToProcess.slice(0, maxEmails);
+        new Notice(`📱 Processing most recent ${maxEmails} of ${emails.length} emails`, 3000);
+      }
 
       console.log(`[Process] Processing ${emailsToProcess.length} new emails (${skippedCount} skipped)`);
 
@@ -865,11 +913,19 @@ export default class MeetingTasksPlugin extends Plugin {
 
       // Load all tasks from vault
       const allTasks = await this.loadAllTasksFromVault();
-      const incompleteTasks = allTasks.filter(t => !t.completed);
+      let incompleteTasks = allTasks.filter(t => !t.completed);
 
       if (incompleteTasks.length < 2) {
         console.log('[Clustering] Not enough tasks to cluster');
         return;
+      }
+
+      // Apply mobile task limit for clustering
+      const maxClusterTasks = PlatformManager.getMaxClusterTasks();
+      if (PlatformManager.isMobile() && incompleteTasks.length > maxClusterTasks) {
+        console.log(`[Platform] Limiting clustering from ${incompleteTasks.length} to ${maxClusterTasks} tasks on mobile`);
+        incompleteTasks = incompleteTasks.slice(0, maxClusterTasks);
+        new Notice(`📱 Clustering limited to ${maxClusterTasks} most recent tasks on mobile`, 3000);
       }
 
       console.log(`[Clustering] Clustering ${incompleteTasks.length} tasks...`);
@@ -1124,100 +1180,136 @@ class MeetingTasksSettingTab extends PluginSettingTab {
           }
 
           try {
-            // Initialize OAuth server if needed
-            if (!this.plugin.oauthServer) {
-              this.plugin.oauthServer = new OAuthServer();
-            }
+            // Platform-specific OAuth flow
+            if (PlatformManager.isMobile()) {
+              // === MOBILE OAUTH FLOW (PKCE) ===
+              console.log('[Auth] Starting mobile OAuth flow');
 
-            // Start the OAuth server
-            if (!this.plugin.oauthServer.isRunning()) {
+              if (!this.plugin.mobileOAuthHandler) {
+                new Notice('Mobile OAuth handler not initialized');
+                return;
+              }
+
+              new Notice('Opening browser for authentication...');
+
               try {
-                await this.plugin.oauthServer.start();
-                new Notice('Starting authentication server...');
+                // Start mobile OAuth - this will open browser and wait for callback
+                const tokens = await this.plugin.mobileOAuthHandler.authenticate();
+
+                // Store tokens
+                this.plugin.settings.gmailToken = {
+                  access_token: tokens.access_token,
+                  refresh_token: tokens.refresh_token,
+                  expiry_date: Date.now() + (tokens.expires_in * 1000)
+                };
+                await this.plugin.saveSettings();
+
+                new Notice('✅ Successfully authenticated with Gmail!');
+                checkAuthStatus();
+                await this.plugin.initializeServices();
+                authButton.setButtonText('Re-authenticate');
               } catch (error) {
-                new Notice(`Failed to start OAuth server: ${error.message}`);
-                return;
+                console.error('[Mobile Auth] Failed:', error);
+                new Notice(`Authentication failed: ${error.message}`);
               }
-            }
 
-            // Set credentials with the OAuth server redirect URI
-            const redirectUri = this.plugin.oauthServer.getRedirectUri();
-            this.plugin.gmailService.setCredentials(
-              this.plugin.settings.googleClientId,
-              this.plugin.settings.googleClientSecret,
-              redirectUri
-            );
+            } else {
+              // === DESKTOP OAUTH FLOW (Local Server) ===
+              console.log('[Auth] Starting desktop OAuth flow');
 
-            // Get authorization URL and open it
-            const authUrl = this.plugin.gmailService.getAuthorizationUrl();
-            window.open(authUrl, '_blank');
+              // Initialize OAuth server if needed
+              if (!this.plugin.oauthServer) {
+                this.plugin.oauthServer = new OAuthServer();
+              }
 
-            // Show waiting modal
-            const modal = new Modal(this.app);
-            modal.contentEl.addClass('gmail-auth-modal');
+              // Start the OAuth server
+              if (!this.plugin.oauthServer.isRunning()) {
+                try {
+                  await this.plugin.oauthServer.start();
+                  new Notice('Starting authentication server...');
+                } catch (error) {
+                  new Notice(`Failed to start OAuth server: ${error.message}`);
+                  return;
+                }
+              }
 
-            modal.contentEl.createEl('h2', { text: '🔐 Authenticating with Gmail...' });
+              // Set credentials with the OAuth server redirect URI
+              const redirectUri = this.plugin.oauthServer.getRedirectUri();
+              this.plugin.gmailService.setCredentials(
+                this.plugin.settings.googleClientId,
+                this.plugin.settings.googleClientSecret,
+                redirectUri
+              );
 
-            const instructionsEl = modal.contentEl.createDiv('auth-instructions');
-            instructionsEl.createEl('p', {
-              text: 'Please complete the authorization in your browser.'
-            });
-            instructionsEl.createEl('p', {
-              text: 'This window will close automatically when authentication is complete.'
-            });
+              // Get authorization URL and open it
+              const authUrl = this.plugin.gmailService.getAuthorizationUrl();
+              window.open(authUrl, '_blank');
 
-            const loadingEl = modal.contentEl.createDiv('auth-loading');
-            loadingEl.style.textAlign = 'center';
-            loadingEl.style.marginTop = '20px';
-            loadingEl.createEl('span', { text: '⏳ Waiting for authorization...' });
+              // Show waiting modal
+              const modal = new Modal(this.app);
+              modal.contentEl.addClass('gmail-auth-modal');
 
-            const cancelBtn = modal.contentEl.createEl('button', {
-              text: 'Cancel',
-              cls: 'auth-cancel-btn'
-            });
-            cancelBtn.style.marginTop = '20px';
-            cancelBtn.onclick = async () => {
-              modal.close();
-              await this.plugin.oauthServer?.stop();
-            };
+              modal.contentEl.createEl('h2', { text: '🔐 Authenticating with Gmail...' });
 
-            modal.open();
+              const instructionsEl = modal.contentEl.createDiv('auth-instructions');
+              instructionsEl.createEl('p', {
+                text: 'Please complete the authorization in your browser.'
+              });
+              instructionsEl.createEl('p', {
+                text: 'This window will close automatically when authentication is complete.'
+              });
 
-            // Wait for authorization code
-            try {
-              const code = await this.plugin.oauthServer.waitForAuthCode();
+              const loadingEl = modal.contentEl.createDiv('auth-loading');
+              loadingEl.style.textAlign = 'center';
+              loadingEl.style.marginTop = '20px';
+              loadingEl.createEl('span', { text: '⏳ Waiting for authorization...' });
 
-              if (!code) {
-                new Notice('No authorization code received');
+              const cancelBtn = modal.contentEl.createEl('button', {
+                text: 'Cancel',
+                cls: 'auth-cancel-btn'
+              });
+              cancelBtn.style.marginTop = '20px';
+              cancelBtn.onclick = async () => {
                 modal.close();
+                await this.plugin.oauthServer?.stop();
+              };
+
+              modal.open();
+
+              // Wait for authorization code
+              try {
+                const code = await this.plugin.oauthServer.waitForAuthCode();
+
+                if (!code) {
+                  new Notice('No authorization code received');
+                  modal.close();
+                  await this.plugin.oauthServer.stop();
+                  return;
+                }
+
+                // Exchange code for token
+                modal.close();
+                new Notice('Processing authentication...');
+
+                await this.plugin.gmailService!.exchangeCodeForToken(code);
+                new Notice('✅ Successfully authenticated with Gmail!');
+                checkAuthStatus();
+                await this.plugin.initializeServices();
+
+                // Stop the OAuth server
                 await this.plugin.oauthServer.stop();
-                return;
+
+                // Update button text after successful auth
+                authButton.setButtonText('Re-authenticate');
+              } catch (error) {
+                modal.close();
+                console.error('Authentication error:', error);
+                new Notice(`Authentication failed: ${error.message}`);
+                await this.plugin.oauthServer?.stop();
               }
-
-              // Exchange code for token
-              modal.close();
-              new Notice('Processing authentication...');
-
-              await this.plugin.gmailService!.exchangeCodeForToken(code);
-              new Notice('✅ Successfully authenticated with Gmail!');
-              checkAuthStatus();
-              await this.plugin.initializeServices();
-
-              // Stop the OAuth server
-              await this.plugin.oauthServer.stop();
-
-              // Update button text after successful auth
-              authButton.setButtonText('Re-authenticate');
-            } catch (error) {
-              modal.close();
-              console.error('Authentication error:', error);
-              new Notice(`Authentication failed: ${error.message}`);
-              await this.plugin.oauthServer?.stop();
-
             }
           } catch (error) {
             new Notice(`Failed to start authentication: ${error.message}`);
-
           }
         });
       });
