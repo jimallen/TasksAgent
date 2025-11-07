@@ -43,7 +43,10 @@ Works on macOS, Linux, and Windows (Git Bash). The installer will:
 - Download the release files automatically
 - Find your Obsidian vaults
 - Install the plugin files
+- **Preserve your existing settings and data** (never overwrites `data.json`)
 - Guide you through setup
+
+**Safe to run on updates:** The installer only updates plugin code files (`main.js`, `manifest.json`, `styles.css`). Your API keys, OAuth tokens, and all settings are preserved.
 
 ### Option 2: Manual Installation
 

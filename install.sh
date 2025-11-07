@@ -177,14 +177,26 @@ for vault_path in "${SELECTED_VAULTS[@]}"; do
 
     PLUGIN_DIR="$vault_path/.obsidian/plugins/$PLUGIN_ID"
 
+    # Check if plugin is already installed
+    if [ -f "$PLUGIN_DIR/data.json" ]; then
+        echo -e "${YELLOW}⚠️  Plugin already installed - updating plugin files only${NC}"
+        echo -e "${GREEN}✓ Your settings and data will be preserved${NC}"
+    fi
+
     mkdir -p "$PLUGIN_DIR"
 
+    # Only copy plugin code files, never overwrite user data (data.json)
     cp "${TEMP_DIR}/main.js" "$PLUGIN_DIR/"
     cp "${TEMP_DIR}/manifest.json" "$PLUGIN_DIR/"
     cp "${TEMP_DIR}/styles.css" "$PLUGIN_DIR/"
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Successfully installed to: $vault_name${NC}"
+        if [ -f "$PLUGIN_DIR/data.json" ]; then
+            echo -e "${GREEN}   Plugin updated - your settings preserved${NC}"
+        else
+            echo -e "${YELLOW}   First-time install - configure plugin settings in Obsidian${NC}"
+        fi
     else
         echo -e "${RED}❌ Failed to install to: $vault_name${NC}"
     fi
@@ -193,6 +205,9 @@ done
 echo
 echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
 echo -e "${GREEN}✨ Installation complete!${NC}"
+echo
+echo -e "${GREEN}📌 Note: Only plugin code was updated${NC}"
+echo -e "${GREEN}   Your settings, API keys, and data are safe${NC}"
 echo
 echo -e "${YELLOW}Next steps:${NC}"
 echo -e "  1. Restart Obsidian or reload with Ctrl/Cmd+R"

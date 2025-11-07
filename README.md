@@ -119,6 +119,8 @@ curl -fsSL https://raw.githubusercontent.com/jimallen/TasksAgent/master/install.
 ```
 Downloads and installs the plugin automatically. Works on macOS, Linux, and Windows (Git Bash).
 
+**Safe for updates:** Only updates plugin code files. Your settings, API keys, and OAuth tokens are never overwritten.
+
 #### Option 2: Clone and Deploy (For Developers)
 ```bash
 git clone https://github.com/jimallen/TasksAgent.git
