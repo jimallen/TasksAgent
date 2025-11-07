@@ -45,9 +45,11 @@ VERSION=$(echo "$LATEST_RELEASE" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/
 if [ -z "$VERSION" ]; then
     echo -e "${YELLOW}⚠️  No releases found. Using files from master branch...${NC}"
     BASE_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/master"
+    USE_RELEASES=false
 else
     echo -e "${GREEN}✅ Found version: ${VERSION}${NC}"
-    BASE_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${VERSION}"
+    BASE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}"
+    USE_RELEASES=true
 fi
 
 # Create temporary directory
@@ -57,9 +59,17 @@ trap "rm -rf ${TEMP_DIR}" EXIT
 echo -e "${YELLOW}📥 Downloading plugin files...${NC}"
 
 # Download required files
-curl -fsSL "${BASE_URL}/main.js" -o "${TEMP_DIR}/main.js"
-curl -fsSL "${BASE_URL}/manifest.json" -o "${TEMP_DIR}/manifest.json"
-curl -fsSL "${BASE_URL}/styles.css" -o "${TEMP_DIR}/styles.css"
+if [ "$USE_RELEASES" = true ]; then
+    # Download from release assets
+    curl -fsSL "${BASE_URL}/main.js" -o "${TEMP_DIR}/main.js"
+    curl -fsSL "${BASE_URL}/manifest.json" -o "${TEMP_DIR}/manifest.json"
+    curl -fsSL "${BASE_URL}/styles.css" -o "${TEMP_DIR}/styles.css"
+else
+    # Fallback to raw repository files
+    curl -fsSL "${BASE_URL}/main.js" -o "${TEMP_DIR}/main.js"
+    curl -fsSL "${BASE_URL}/manifest.json" -o "${TEMP_DIR}/manifest.json"
+    curl -fsSL "${BASE_URL}/styles.css" -o "${TEMP_DIR}/styles.css"
+fi
 
 # Verify files downloaded
 for file in main.js manifest.json styles.css; do
