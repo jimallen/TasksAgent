@@ -113,7 +113,16 @@ if [ ${#VAULTS[@]} -eq 0 ]; then
     echo -e "${YELLOW}No Obsidian vaults found automatically.${NC}"
     echo
     echo -e "${BLUE}Please enter the full path to your Obsidian vault:${NC}"
-    read -r custom_path
+
+    # Read from /dev/tty for piped script support
+    if [ -t 0 ]; then
+        read -r custom_path
+    else
+        read -r custom_path < /dev/tty 2>/dev/null || {
+            echo -e "${RED}❌ Cannot read input. Please run this script interactively.${NC}"
+            exit 1
+        }
+    fi
 
     custom_path="${custom_path/#\~/$HOME}"
 
@@ -141,7 +150,15 @@ if [ ${#VAULTS[@]} -gt 1 ]; then
     echo -e "${YELLOW}Or enter 'all' to install to all vaults:${NC}"
 fi
 
-read -r selection
+# Read from /dev/tty for piped script support
+if [ -t 0 ]; then
+    read -r selection
+else
+    read -r selection < /dev/tty 2>/dev/null || {
+        echo -e "${RED}❌ Cannot read input. Please run this script interactively.${NC}"
+        exit 1
+    }
+fi
 
 if [ "$selection" = "all" ] && [ ${#VAULTS[@]} -gt 1 ]; then
     SELECTED_VAULTS=("${VAULTS[@]}")
@@ -149,6 +166,7 @@ elif [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" 
     SELECTED_VAULTS=("${VAULTS[$((selection-1))]}")
 else
     echo -e "${RED}❌ Invalid selection!${NC}"
+    echo -e "${YELLOW}Please enter a valid number (1-${#VAULTS[@]})${NC}"
     exit 1
 fi
 

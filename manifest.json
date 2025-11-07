@@ -1,7 +1,7 @@
 {
   "id": "obsidian-meeting-tasks",
   "name": "Meeting Tasks",
-  "version": "3.4.2",
+  "version": "3.4.3",
   "minAppVersion": "1.0.0",
   "description": "AI-powered Gmail task extraction with intelligent clustering. Dynamic label processors, editable cluster titles, and smart re-clustering modes. Full mobile support with platform-optimized constraints.",
   "author": "Jim Allen",
