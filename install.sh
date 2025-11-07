@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-liner installer for Obsidian Meeting Tasks Plugin
-# Usage: curl -fsSL https://raw.githubusercontent.com/jimallen/obsidian-meeting-tasks/master/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/jimallen/TasksAgent/master/install.sh | bash
 
 set -e
 
@@ -11,7 +11,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 REPO_OWNER="jimallen"
-REPO_NAME="obsidian-meeting-tasks"
+REPO_NAME="TasksAgent"
 PLUGIN_ID="meeting-tasks"
 
 echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
@@ -172,6 +172,6 @@ echo -e "  2. Enable the plugin in Settings → Community Plugins"
 echo -e "  3. Configure Gmail OAuth and Claude API in plugin settings"
 echo
 echo -e "${BLUE}Documentation:${NC}"
-echo -e "  ${YELLOW}https://github.com/${REPO_OWNER}/${REPO_NAME}${NC}"
+echo -e "  ${YELLOW}https://github.com/jimallen/TasksAgent${NC}"
 echo
 echo -e "${BLUE}═══════════════════════════════════════════════${NC}"

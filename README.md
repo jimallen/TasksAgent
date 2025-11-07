@@ -115,21 +115,21 @@ When you open the dashboard, AI automatically groups related tasks:
 
 #### Option 1: One-Line Install (Easiest)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jimallen/obsidian-meeting-tasks/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jimallen/TasksAgent/master/install.sh | bash
 ```
 Downloads and installs the plugin automatically. Works on macOS, Linux, and Windows (Git Bash).
 
 #### Option 2: Clone and Deploy (For Developers)
 ```bash
-git clone https://github.com/jimallen/obsidian-meeting-tasks.git
-cd obsidian-meeting-tasks
+git clone https://github.com/jimallen/TasksAgent.git
+cd TasksAgent
 npm install
 npm run deploy
 ```
 The interactive script will find your Obsidian vaults and install the plugin automatically.
 
 #### Option 3: Manual Installation
-1. Download `main.js`, `manifest.json`, and `styles.css` from [latest release](https://github.com/jimallen/obsidian-meeting-tasks/releases/latest)
+1. Download `main.js`, `manifest.json`, and `styles.css` from [latest release](https://github.com/jimallen/TasksAgent/releases/latest)
 2. Create folder: `<vault>/.obsidian/plugins/meeting-tasks/`
 3. Copy the files to that folder
 4. Enable plugin in Obsidian settings
