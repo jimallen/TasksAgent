@@ -56,6 +56,7 @@ Verify the following files exist:
 - `main.js`
 - `manifest.json`
 - `styles.css`
+- `install.sh` (installer script)
 
 ### 4. Commit Version Changes
 
@@ -87,7 +88,7 @@ cp .github/RELEASE_TEMPLATE.md /tmp/release-notes.md
 gh release create v3.5.0 \
   --title "v3.5.0 - [Your Release Title]" \
   --notes-file /tmp/release-notes.md \
-  main.js manifest.json styles.css
+  main.js manifest.json styles.css install.sh
 ```
 
 #### Using GitHub Web Interface:
@@ -105,6 +106,7 @@ gh release create v3.5.0 \
    - `main.js`
    - `manifest.json`
    - `styles.css`
+   - `install.sh`
 7. Click "Publish release"
 
 ## Release Template Placeholders

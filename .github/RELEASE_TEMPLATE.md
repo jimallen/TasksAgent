@@ -29,12 +29,18 @@ Version X.X.X brings [brief description of the main feature/change]
 
 ### Option 1: One-Line Install (Easiest)
 
+**Install Latest Release:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jimallen/TasksAgent/master/install.sh | bash
 ```
 
+**Install This Specific Version (X.X.X):**
+```bash
+curl -fsSL https://github.com/jimallen/TasksAgent/releases/download/vX.X.X/install.sh | bash
+```
+
 Works on macOS, Linux, and Windows (Git Bash). The installer will:
-- Download the latest release automatically
+- Download the release files automatically
 - Find your Obsidian vaults
 - Install the plugin files
 - Guide you through setup
@@ -45,6 +51,7 @@ Download the release assets below and place them in your vault's plugin folder:
 - `main.js` - Plugin code
 - `manifest.json` - Plugin metadata
 - `styles.css` - UI styles
+- `install.sh` - Installer script (optional, for scripted installation)
 
 **Steps:**
 1. Download all three files from the Assets section below
